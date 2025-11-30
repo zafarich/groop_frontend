@@ -1,11 +1,11 @@
 export default [
   {
-    title: "Home",
+    title: "Bosh sahifa",
     to: {name: "root"},
     icon: {icon: "tabler-smart-home"},
   },
   {
-    title: "Teachers",
+    title: "O'qituvchilar",
     to: {name: "teachers"},
     icon: {icon: "tabler-users"},
   },

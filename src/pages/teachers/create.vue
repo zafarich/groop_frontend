@@ -1,5 +1,6 @@
 <script setup>
 import {usePhoneMask} from "@/composables/usePhoneMask";
+import {useToast} from "@/composables/useToast";
 import {$api} from "@/utils/api";
 
 definePage({
@@ -10,29 +11,57 @@ definePage({
 
 const router = useRouter();
 const {getFullPhoneNumber, phoneRule} = usePhoneMask();
+const {success: showSuccess} = useToast();
 
 const form = ref({
   firstName: "",
   lastName: "",
   phoneNumber: "",
-  telegramUserId: "",
   specialty: "",
   bio: "",
 });
 
 const loading = ref(false);
 const errorMessage = ref("");
-const successMessage = ref("");
+const botLink = ref("");
+const showBotLinkModal = ref(false);
+const createdTeacherId = ref(null);
 
 // Form validation rules
 const rules = {
   required: (value) => !!value || "To'ldirish shart",
   phone: phoneRule,
-  telegramUserId: (value) => {
-    if (!value) return "To'ldirish shart";
-    const num = parseInt(value);
-    return (!isNaN(num) && num > 0) || "Telegram User ID raqam bo'lishi kerak";
-  },
+};
+
+// Fetch bot link
+const fetchBotLink = async (teacherId) => {
+  try {
+    const response = await $api(`/v1/teachers/${teacherId}/bot-link`, {
+      method: "GET",
+    });
+
+    if (response.success && response.data) {
+      botLink.value = response.data.botLink;
+    }
+  } catch (error) {
+    console.error("Error fetching bot link:", error);
+  }
+};
+
+// Copy bot link to clipboard
+const copyBotLink = async () => {
+  try {
+    await navigator.clipboard.writeText(botLink.value);
+    showSuccess("Havola nusxalandi!");
+  } catch (error) {
+    errorMessage.value = "Havolani nusxalashda xatolik";
+  }
+};
+
+// Close modal and redirect
+const closeBotLinkModal = () => {
+  showBotLinkModal.value = false;
+  router.push("/teachers");
 };
 
 // Submit function
@@ -44,16 +73,8 @@ const onSubmit = async () => {
     return;
   }
 
-  // Validate Telegram User ID
-  const telegramUserId = parseInt(form.value.telegramUserId);
-  if (isNaN(telegramUserId) || telegramUserId <= 0) {
-    errorMessage.value = "Telegram User ID to'g'ri formatda emas";
-    return;
-  }
-
   loading.value = true;
   errorMessage.value = "";
-  successMessage.value = "";
 
   try {
     const response = await $api("/v1/teachers", {
@@ -62,29 +83,27 @@ const onSubmit = async () => {
         firstName: form.value.firstName || undefined,
         lastName: form.value.lastName || undefined,
         phoneNumber: fullPhone,
-        telegramUserId: telegramUserId,
         specialty: form.value.specialty || undefined,
         bio: form.value.bio || undefined,
       },
     });
 
     if (response.success) {
-      successMessage.value = "O'qituvchi muvaffaqiyatli qo'shildi!";
+      showSuccess("O'qituvchi muvaffaqiyatli qo'shildi!");
+      createdTeacherId.value = response.data.id;
+
+      // Fetch bot link and show modal
+      await fetchBotLink(response.data.id);
+      showBotLinkModal.value = true;
 
       // Reset form
       form.value = {
         firstName: "",
         lastName: "",
         phoneNumber: "",
-        telegramUserId: "",
         specialty: "",
         bio: "",
       };
-
-      // Redirect after 2 seconds
-      setTimeout(() => {
-        router.push("/");
-      }, 2000);
     } else {
       errorMessage.value = response.message || "Xatolik yuz berdi";
     }
@@ -114,18 +133,6 @@ const onCancel = () => {
         </VCardTitle>
 
         <VDivider />
-
-        <!-- Success alert -->
-        <VCardText v-if="successMessage">
-          <VAlert
-            type="success"
-            variant="tonal"
-            closable
-            @click:close="successMessage = ''"
-          >
-            {{ successMessage }}
-          </VAlert>
-        </VCardText>
 
         <!-- Error alert -->
         <VCardText v-if="errorMessage">
@@ -178,19 +185,8 @@ const onCancel = () => {
                 </AppTextField>
               </VCol>
 
-              <!-- Telegram User ID -->
-              <VCol cols="12" md="6">
-                <AppTextField
-                  v-model="form.telegramUserId"
-                  label="Telegram User ID *"
-                  placeholder="123456789"
-                  type="number"
-                  :rules="[rules.telegramUserId]"
-                />
-              </VCol>
-
               <!-- Specialty -->
-              <VCol cols="12">
+              <VCol cols="6">
                 <AppTextField
                   v-model="form.specialty"
                   label="Mutaxassislik"
@@ -229,4 +225,42 @@ const onCancel = () => {
       </VCard>
     </VCol>
   </VRow>
+
+  <!-- Bot Link Modal -->
+  <VDialog v-model="showBotLinkModal" max-width="600" persistent>
+    <VCard>
+      <VCardTitle class="d-flex align-center">
+        <VIcon icon="tabler-brand-telegram" class="me-2" color="primary" />
+        <span>Telegram Bot Havolasi</span>
+      </VCardTitle>
+
+      <VDivider />
+
+      <VCardText>
+        <VAlert type="info" variant="tonal" class="mb-4">
+          Bu havolani o'qituvchiga yuboring. Sizning telegram botingizdan
+          o'qituvchi to'liq foydalanishi uchun muhim
+        </VAlert>
+
+        <div class="d-flex align-end gap-2">
+          <AppTextField
+            :model-value="botLink"
+            readonly
+            label="Bot havolasi"
+            variant="outlined"
+          />
+          <VBtn prepend-icon="tabler-copy" color="primary" @click="copyBotLink">
+            Nusxa olish
+          </VBtn>
+        </div>
+      </VCardText>
+
+      <VDivider />
+
+      <VCardActions>
+        <VSpacer />
+        <VBtn color="primary" @click="closeBotLinkModal"> Yopish </VBtn>
+      </VCardActions>
+    </VCard>
+  </VDialog>
 </template>

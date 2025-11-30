@@ -1,5 +1,6 @@
 <script setup>
 import {usePhoneMask} from "@/composables/usePhoneMask";
+import {useToast} from "@/composables/useToast";
 import {$api} from "@/utils/api";
 
 definePage({
@@ -11,6 +12,7 @@ definePage({
 const router = useRouter();
 const route = useRoute();
 const {getFullPhoneNumber, phoneRule} = usePhoneMask();
+const {success: showSuccess} = useToast();
 
 const teacherId = computed(() => route.params.id);
 
@@ -18,25 +20,19 @@ const form = ref({
   firstName: "",
   lastName: "",
   phoneNumber: "",
-  telegramUserId: "",
   specialty: "",
   bio: "",
   isActive: true,
 });
 
+const botLink = ref("");
 const loading = ref(false);
 const fetchLoading = ref(false);
 const errorMessage = ref("");
-const successMessage = ref("");
 
 // Form validation rules
 const rules = {
   phone: phoneRule,
-  telegramUserId: (value) => {
-    if (!value) return true; // Optional
-    const num = parseInt(value);
-    return (!isNaN(num) && num > 0) || "Telegram User ID raqam bo'lishi kerak";
-  },
 };
 
 // Fetch teacher data
@@ -60,7 +56,6 @@ const fetchTeacher = async () => {
         firstName: teacher.user?.firstName || "",
         lastName: teacher.user?.lastName || "",
         phoneNumber: phoneWithoutCode,
-        telegramUserId: teacher.user?.telegramUser?.telegramId || "",
         specialty: teacher.specialty || "",
         bio: teacher.bio || "",
         isActive: teacher.isActive !== undefined ? teacher.isActive : true,
@@ -76,11 +71,35 @@ const fetchTeacher = async () => {
   }
 };
 
+// Fetch bot link
+const fetchBotLink = async () => {
+  try {
+    const response = await $api(`/v1/teachers/${teacherId.value}/bot-link`, {
+      method: "GET",
+    });
+
+    if (response.success && response.data) {
+      botLink.value = response.data.botLink;
+    }
+  } catch (error) {
+    console.error("Error fetching bot link:", error);
+  }
+};
+
+// Copy bot link to clipboard
+const copyBotLink = async () => {
+  try {
+    await navigator.clipboard.writeText(botLink.value);
+    showSuccess("Havola nusxalandi!");
+  } catch (error) {
+    errorMessage.value = "Havolani nusxalashda xatolik";
+  }
+};
+
 // Submit function
 const onSubmit = async () => {
   loading.value = true;
   errorMessage.value = "";
-  successMessage.value = "";
 
   try {
     const body = {};
@@ -98,12 +117,6 @@ const onSubmit = async () => {
         body.phoneNumber = fullPhone;
       }
     }
-    if (form.value.telegramUserId) {
-      const telegramUserId = parseInt(form.value.telegramUserId);
-      if (!isNaN(telegramUserId) && telegramUserId > 0) {
-        body.telegramUserId = telegramUserId;
-      }
-    }
     if (form.value.specialty?.trim()) {
       body.specialty = form.value.specialty.trim();
     }
@@ -118,8 +131,7 @@ const onSubmit = async () => {
     });
 
     if (response.success) {
-      successMessage.value =
-        "O'qituvchi ma'lumotlari muvaffaqiyatli yangilandi!";
+      showSuccess("O'qituvchi ma'lumotlari muvaffaqiyatli yangilandi!");
 
       // Redirect after 1.5 seconds
       setTimeout(() => {
@@ -146,6 +158,7 @@ const onCancel = () => {
 // Load teacher data on mount
 onMounted(() => {
   fetchTeacher();
+  fetchBotLink();
 });
 </script>
 
@@ -167,18 +180,6 @@ onMounted(() => {
         </VCardText>
 
         <template v-else>
-          <!-- Success alert -->
-          <VCardText v-if="successMessage">
-            <VAlert
-              type="success"
-              variant="tonal"
-              closable
-              @click:close="successMessage = ''"
-            >
-              {{ successMessage }}
-            </VAlert>
-          </VCardText>
-
           <!-- Error alert -->
           <VCardText v-if="errorMessage">
             <VAlert
@@ -188,6 +189,39 @@ onMounted(() => {
               @click:close="errorMessage = ''"
             >
               {{ errorMessage }}
+            </VAlert>
+          </VCardText>
+
+          <!-- Bot Link Section -->
+          <VCardText v-if="botLink">
+            <VAlert type="info" variant="tonal" class="mb-0">
+              <div class="d-flex align-center justify-space-between">
+                <div>
+                  <div class="text-subtitle-2 mb-1">Telegram Bot Havolasi</div>
+                  <div class="text-caption">
+                    Bu havolani o'qituvchiga yuboring. Sizning telegram
+                    botingizdan o'qituvchi to'liq foydalanishi uchun muhim
+                  </div>
+                </div>
+              </div>
+              <div class="d-flex align-center gap-2 mt-3">
+                <AppTextField
+                  :model-value="botLink"
+                  readonly
+                  density="compact"
+                  variant="outlined"
+                  hide-details
+                />
+                <VBtn
+                  prepend-icon="tabler-copy"
+                  color="primary"
+                  @click="copyBotLink"
+                  size="small"
+                  variant="tonal"
+                >
+                  Nusxa olish
+                </VBtn>
+              </div>
             </VAlert>
           </VCardText>
 
@@ -229,19 +263,8 @@ onMounted(() => {
                   </AppTextField>
                 </VCol>
 
-                <!-- Telegram User ID -->
-                <VCol cols="12" md="6">
-                  <AppTextField
-                    v-model="form.telegramUserId"
-                    label="Telegram User ID"
-                    placeholder="123456789"
-                    type="number"
-                    :rules="[rules.telegramUserId]"
-                  />
-                </VCol>
-
                 <!-- Specialty -->
-                <VCol cols="12">
+                <VCol cols="6">
                   <AppTextField
                     v-model="form.specialty"
                     label="Mutaxassislik"
