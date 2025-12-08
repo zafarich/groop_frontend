@@ -126,6 +126,17 @@ const onCancel = () => {
 <template>
   <VRow>
     <VCol cols="12">
+      <!-- Back Button -->
+      <VBtn
+        variant="text"
+        color="primary"
+        prepend-icon="tabler-arrow-left"
+        class="mb-4"
+        @click="router.go(-1)"
+      >
+        Orqaga
+      </VBtn>
+
       <VCard>
         <VCardTitle class="d-flex align-center">
           <VIcon icon="tabler-user-plus" class="me-2" />

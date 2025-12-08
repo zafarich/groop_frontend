@@ -1,29 +1,29 @@
 <script setup>
-import { useGenerateImageVariant } from '@core/composable/useGenerateImageVariant'
-import misc404 from '@images/pages/404.png'
-import miscMaskDark from '@images/pages/misc-mask-dark.png'
-import miscMaskLight from '@images/pages/misc-mask-light.png'
+import {useGenerateImageVariant} from "@core/composable/useGenerateImageVariant";
+import misc404 from "@images/pages/404.png";
+import miscMaskDark from "@images/pages/misc-mask-dark.png";
+import miscMaskLight from "@images/pages/misc-mask-light.png";
 
-const authThemeMask = useGenerateImageVariant(miscMaskLight, miscMaskDark)
+const authThemeMask = useGenerateImageVariant(miscMaskLight, miscMaskDark);
 
 definePage({
-  alias: '/pages/misc/not-found/:error(.*)',
+  alias: "/pages/misc/not-found/:error(.*)",
   meta: {
-    layout: 'blank',
+    layout: "blank",
     public: true,
   },
-})
+});
 </script>
 
 <template>
   <div class="misc-wrapper">
     <ErrorHeader
       status-code="404"
-      title="Page Not Found ⚠️"
-      description="We couldn't find the page you are looking for."
+      title="Sahifa topilmadi ⚠️"
+      description="Siz qidirgan sahifa topilmadi"
     />
 
-    <VBtn to="/" class="mb-11"> Back to Home </VBtn>
+    <VBtn to="/" class="mb-11"> Bosh sahifaga qaytish </VBtn>
 
     <!-- 👉 Image -->
     <div class="misc-avatar w-100 text-center">
@@ -45,5 +45,5 @@ definePage({
 </template>
 
 <style lang="scss">
-@use '@core/scss/template/pages/misc.scss';
+@use "@core/scss/template/pages/misc.scss";
 </style>

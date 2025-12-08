@@ -7,6 +7,18 @@ const props = defineProps({
     type: Boolean,
     required: true,
   },
+  isEditMode: {
+    type: Boolean,
+    default: false,
+  },
+  initialUsername: {
+    type: String,
+    default: "",
+  },
+  botId: {
+    type: [Number, String],
+    default: null,
+  },
 });
 
 const emit = defineEmits(["update:modelValue", "botConfigured"]);
@@ -17,6 +29,19 @@ const form = ref({
   botUsername: "",
   botToken: "",
 });
+
+watch(
+  () => props.modelValue,
+  (val) => {
+    if (val && props.isEditMode) {
+      form.value.botUsername = props.initialUsername;
+      form.value.botToken = "";
+    } else if (val && !props.isEditMode) {
+      form.value.botUsername = "";
+      form.value.botToken = "";
+    }
+  }
+);
 
 const loading = ref(false);
 const errorMessage = ref("");
@@ -30,6 +55,10 @@ const rules = {
       return "Bot username '_bot' bilan tugashi kerak";
     return true;
   },
+  botToken: (value) => {
+    if (props.isEditMode) return true; // Optional in edit mode
+    return !!value || "To'ldirish shart";
+  },
 };
 
 // Submit function
@@ -40,12 +69,22 @@ const onSubmit = async () => {
   const botUsername = normalizeUsername(form.value.botUsername);
 
   try {
-    const response = await $api("/v1/center-bots", {
-      method: "POST",
-      body: {
-        botUsername: form.value.botUsername.trim(),
-        botToken: form.value.botToken.trim(),
-      },
+    const body = {
+      botUsername: form.value.botUsername.trim(),
+    };
+
+    if (form.value.botToken.trim()) {
+      body.botToken = form.value.botToken.trim();
+    }
+
+    const url = props.isEditMode
+      ? `/v1/center-bots/${props.botId}`
+      : "/v1/center-bots";
+    const method = props.isEditMode ? "PATCH" : "POST";
+
+    const response = await $api(url, {
+      method,
+      body,
     });
 
     if (response.success) {
@@ -77,7 +116,12 @@ function normalizeUsername(username) {
 </script>
 
 <template>
-  <VDialog :model-value="modelValue" max-width="600" persistent>
+  <VDialog
+    :model-value="modelValue"
+    max-width="600"
+    :persistent="!isEditMode"
+    @update:model-value="emit('update:modelValue', $event)"
+  >
     <VCard>
       <VCardTitle class="d-flex align-center">
         <VIcon icon="tabler-brand-telegram" class="me-2" color="primary" />
@@ -140,7 +184,7 @@ function normalizeUsername(username) {
                 label="Bot Token *"
                 placeholder="1234567890:ABCdefGHIjklMNOpqrsTUVwxyz"
                 type="password"
-                :rules="[rules.required]"
+                :rules="[rules.botToken]"
                 hint="BotFather dan olingan token"
                 persistent-hint
               />
@@ -151,6 +195,15 @@ function normalizeUsername(username) {
 
       <VCardActions>
         <VSpacer />
+        <VBtn
+          v-if="isEditMode"
+          color="secondary"
+          variant="outlined"
+          @click="emit('update:modelValue', false)"
+          :disabled="loading"
+        >
+          Bekor qilish
+        </VBtn>
         <VBtn
           color="primary"
           variant="elevated"

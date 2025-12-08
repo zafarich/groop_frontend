@@ -119,6 +119,10 @@ const onDeleteConfirm = async () => {
 onMounted(() => {
   fetchTeachers();
 });
+
+function clickTableItem(item) {
+  router.push({name: "teachers-edit", params: {id: item.id}});
+}
 </script>
 
 <template>
@@ -162,15 +166,15 @@ onMounted(() => {
         <VTable>
           <thead>
             <tr>
-              <th class="text-uppercase">ID</th>
-              <th class="text-uppercase">Ism</th>
-              <th class="text-uppercase">Familiya</th>
-              <th class="text-uppercase">Telefon</th>
-              <th class="text-uppercase">Telegram ID</th>
-              <th class="text-uppercase">Telegram Username</th>
-              <th class="text-uppercase">Mutaxassislik</th>
-              <th class="text-uppercase">Status</th>
-              <th class="text-uppercase">Amallar</th>
+              <th>ID</th>
+              <th>Ism</th>
+              <th>Familiya</th>
+              <th>Telefon</th>
+              <th>Telegram ID</th>
+              <th>Telegram Username</th>
+              <th>Mutaxassislik</th>
+              <th>Status</th>
+              <th>Amallar</th>
             </tr>
           </thead>
           <tbody>
@@ -186,7 +190,12 @@ onMounted(() => {
                 </div>
               </td>
             </tr>
-            <tr v-else v-for="teacher in teachers" :key="teacher.id">
+            <tr
+              @click="clickTableItem"
+              v-else
+              v-for="teacher in teachers"
+              :key="teacher.id"
+            >
               <td>{{ teacher.id }}</td>
               <td>{{ teacher.user?.firstName || "-" }}</td>
               <td>{{ teacher.user?.lastName || "-" }}</td>
