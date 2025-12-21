@@ -363,6 +363,7 @@
     "whenever": true,
     "prettyPhoneNumber": true,
     "useToast": true,
-    "prettyMoney": true
+    "prettyMoney": true,
+    "usePayments": true
   }
 }

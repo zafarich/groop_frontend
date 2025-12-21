@@ -13,9 +13,10 @@
       padding-inline-end: 0.125rem;
 
       .app-logo {
+        gap: 8px;
         svg {
-          width: 35px;
-          height: 35px;
+          width: 40px;
+          height: 40px;
         }
         .app-title {
           font-size: 22px;

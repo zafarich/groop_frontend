@@ -70,7 +70,7 @@ const onSubmit = async () => {
 
   try {
     const body = {
-      botUsername: form.value.botUsername.trim(),
+      botUsername: botUsername.trim(),
     };
 
     if (form.value.botToken.trim()) {

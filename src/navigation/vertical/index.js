@@ -15,6 +15,11 @@ export default [
     icon: {icon: "tabler-users-group"},
   },
   {
+    title: "Cheklarni tasdiqlash",
+    to: {name: "payments"},
+    icon: {icon: "tabler-receipt"},
+  },
+  {
     heading: "Sozlamalar",
   },
   {
