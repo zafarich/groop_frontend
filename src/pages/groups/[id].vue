@@ -1,7 +1,10 @@
 <script setup>
 import AppTextField from "@/@core/components/app-form-elements/AppTextField.vue";
+import AppTextarea from "@/@core/components/app-form-elements/AppTextarea.vue";
 import AppDateTimePicker from "@/@core/components/app-form-elements/AppDateTimePicker.vue";
 import TelegramSetupModal from "@/components/TelegramSetupModal.vue";
+import BulkActivationModal from "@/components/groups/bulk-activation-modal.vue";
+import SendMessageModal from "@/components/groups/send-message-modal.vue";
 import {useToast} from "@/composables/useToast";
 import {$api} from "@/utils/api";
 import {prettyMoney, prettyPhoneNumber} from "@/utils/utils";
@@ -38,6 +41,10 @@ const studentsPagination = ref({
   total: 0,
   totalPages: 0,
 });
+
+// Activatable students (all TRIAL and LEAD for bulk activation)
+const activatableStudents = ref([]);
+const activatableStudentsLoading = ref(false);
 const studentsSearch = ref("");
 
 // Debtors state
@@ -84,6 +91,30 @@ const excludeSearchQuery = ref("");
 const excludeSearchResults = ref([]);
 const excludeSearchLoading = ref(false);
 const excludeSearchTimeout = ref(null);
+
+// Bulk activation modal state
+const showBulkActivationModal = ref(false);
+
+// Send message modal state
+const showSendMessageModal = ref(false);
+
+// Add balance modal state
+const showAddBalanceModal = ref(false);
+const selectedBalanceEnrollment = ref(null);
+const balanceForm = ref({
+  amount: 0,
+  amountDisplay: "",
+  notes: "",
+});
+const balanceLoading = ref(false);
+
+// Individual expel modal state
+const showExpelModal = ref(false);
+const selectedExpelEnrollment = ref(null);
+const expelForm = ref({
+  reason: "",
+});
+const expelLoading = ref(false);
 
 // Get day name in Uzbek
 const getDayName = (dayOfWeek) => {
@@ -163,6 +194,9 @@ const getStudentStatusConfig = (status) => {
       return {color: "primary", text: "Tugatgan"};
     case "DROPPED":
       return {color: "secondary", text: "Tashlab ketgan"};
+
+    case "LEFT_GROUP":
+      return {color: "error", text: "Guruhdan chiqqan"};
     default:
       return {color: "default", text: status};
   }
@@ -201,8 +235,14 @@ const fetchStudents = async () => {
       params.append("status", "LEAD");
     } else if (activeTab.value === "trial") {
       params.append("status", "TRIAL");
+    } else if (activeTab.value === "trial") {
+      params.append("status", "TRIAL");
     } else if (activeTab.value === "active") {
       params.append("status", "ACTIVE");
+    } else if (activeTab.value === "left_group") {
+      params.append("status", "LEFT_GROUP");
+    } else if (activeTab.value === "expelled") {
+      params.append("status", "EXPELLED");
     }
 
     if (studentsSearch.value.trim()) {
@@ -275,6 +315,10 @@ const onTabChange = () => {
   } else {
     studentsPagination.value.page = 1;
     fetchStudents();
+    // Refresh activatable students when switching to 'all' tab
+    if (activeTab.value === "all") {
+      fetchActivatableStudents();
+    }
   }
 };
 
@@ -442,8 +486,8 @@ const saveDiscount = async () => {
   }
 };
 
-// Lesson start date management
-const openLessonStartDateModal = (student) => {
+// Student activation management
+const openActivationModal = (student) => {
   selectedLessonEnrollment.value = student;
   lessonStartDateForm.value = {
     lessonStartDate: student.lessonStartDate
@@ -454,7 +498,7 @@ const openLessonStartDateModal = (student) => {
   showLessonStartDateModal.value = true;
 };
 
-const saveLessonStartDate = async () => {
+const activateStudent = async () => {
   if (!selectedLessonEnrollment.value) return;
   if (!lessonStartDateForm.value.lessonStartDate) {
     showError("Iltimos, dars boshlanish sanasini tanlang");
@@ -464,7 +508,7 @@ const saveLessonStartDate = async () => {
   lessonStartDateLoading.value = true;
   try {
     const response = await $api(
-      `/v1/enrollments/${selectedLessonEnrollment.value.id}/lesson-start-date`,
+      `/v1/enrollments/${selectedLessonEnrollment.value.id}/activate`,
       {
         method: "PATCH",
         body: {
@@ -474,15 +518,14 @@ const saveLessonStartDate = async () => {
     );
 
     if (response.success) {
-      prorationInfo.value = response.data.proration;
-      showSuccess("Dars boshlanish sanasi muvaffaqiyatli o'zgartirildi!");
+      showSuccess("O'quvchi muvaffaqiyatli faollashtirildi!");
       showLessonStartDateModal.value = false;
       await fetchStudents();
     }
   } catch (error) {
-    console.error("Error updating lesson start date:", error);
+    console.error("Error activating student:", error);
     showError(
-      error.data?.message || "Dars sanasini o'zgartirishda xatolik yuz berdi"
+      error.data?.message || "O'quvchini faollashtiriishda xatolik yuz berdi"
     );
   } finally {
     lessonStartDateLoading.value = false;
@@ -597,10 +640,184 @@ const performBulkExpel = async () => {
   }
 };
 
+// Bulk activation management
+const openBulkActivationModal = async () => {
+  // If in 'all' tab, fetch all TRIAL/LEAD students first
+  if (activeTab.value === "all") {
+    await fetchActivatableStudents();
+  }
+  showBulkActivationModal.value = true;
+};
+
+const handleBulkActivationSuccess = () => {
+  showBulkActivationModal.value = false;
+  fetchStudents();
+  fetchActivatableStudents(); // Refresh the count after activation
+};
+
+// Add balance management
+const openAddBalanceModal = (student) => {
+  selectedBalanceEnrollment.value = student;
+  balanceForm.value = {
+    amount: 0,
+    amountDisplay: "",
+    notes: "",
+  };
+  showAddBalanceModal.value = true;
+};
+
+const formatBalanceAmount = (value) => {
+  const numericValue = value.replace(/\s/g, "");
+  const number = parseInt(numericValue, 10);
+  if (isNaN(number)) {
+    balanceForm.value.amount = 0;
+    balanceForm.value.amountDisplay = "";
+  } else {
+    balanceForm.value.amount = number;
+    balanceForm.value.amountDisplay = prettyMoney(number);
+  }
+};
+
+const addBalance = async () => {
+  if (!selectedBalanceEnrollment.value) return;
+  if (!balanceForm.value.amount || balanceForm.value.amount <= 0) {
+    showError("Iltimos, to'lov summasini kiriting");
+    return;
+  }
+
+  balanceLoading.value = true;
+  try {
+    const response = await $api(
+      `/v1/enrollments/${selectedBalanceEnrollment.value.id}/add-balance`,
+      {
+        method: "POST",
+        body: {
+          amount: balanceForm.value.amount,
+          notes: balanceForm.value.notes || "",
+        },
+      }
+    );
+
+    if (response.success) {
+      const previousBalance = response.data.previousBalance;
+      const newBalance = response.data.newBalance;
+      showSuccess(
+        `To'lov muvaffaqiyatli qo'shildi! Balans: ${prettyMoney(previousBalance)} → ${prettyMoney(newBalance)} so'm`
+      );
+      showAddBalanceModal.value = false;
+      await fetchStudents();
+    }
+  } catch (error) {
+    console.error("Error adding balance:", error);
+    showError(error.data?.message || "To'lov qo'shishda xatolik yuz berdi");
+  } finally {
+    balanceLoading.value = false;
+  }
+};
+
+// Individual expel management
+const openExpelModal = (student) => {
+  selectedExpelEnrollment.value = student;
+  expelForm.value = {
+    reason: "",
+  };
+  showExpelModal.value = true;
+};
+
+const expelStudent = async () => {
+  if (!selectedExpelEnrollment.value) return;
+
+  expelLoading.value = true;
+  try {
+    const response = await $api(
+      `/v1/enrollments/${selectedExpelEnrollment.value.id}/expel`,
+      {
+        method: "PATCH",
+        body: {
+          reason: expelForm.value.reason || undefined,
+        },
+      }
+    );
+
+    if (response.success) {
+      showSuccess("O'quvchi muvaffaqiyatli guruhdan chiqarildi!");
+      showExpelModal.value = false;
+      await fetchStudents();
+      // Also refresh debtors if student was in debt
+      if (activeTab.value === "debtors") {
+        await fetchDebtors();
+      }
+    }
+  } catch (error) {
+    console.error("Error expelling student:", error);
+    showError(
+      error.data?.message || "O'quvchini chiqarishda xatolik yuz berdi"
+    );
+  } finally {
+    expelLoading.value = false;
+  }
+};
+
+// Fetch all activatable students (TRIAL and LEAD) for bulk activation
+const fetchActivatableStudents = async () => {
+  activatableStudentsLoading.value = true;
+  try {
+    const params = new URLSearchParams({
+      page: "1",
+      limit: "1000", // Get all TRIAL/LEAD students
+      status: "TRIAL_LEAD", // Backend should support this or we use client-side filtering
+    });
+
+    const response = await $api(
+      `/v1/groups/${groupId.value}/students?${params.toString()}`,
+      {
+        method: "GET",
+      }
+    );
+
+    if (response.success && response.data) {
+      // If backend doesn't support TRIAL_LEAD, filter client-side
+      const allStudents = response.data || [];
+      activatableStudents.value = allStudents.filter(
+        (s) => s.status === "TRIAL" || s.status === "LEAD"
+      );
+    }
+  } catch (error) {
+    console.error("Error fetching activatable students:", error);
+    // Fallback to current page students filtered
+    activatableStudents.value = students.value.filter(
+      (s) => s.status === "TRIAL" || s.status === "LEAD"
+    );
+  } finally {
+    activatableStudentsLoading.value = false;
+  }
+};
+
+// Get activatable students count for button display
+const getActivatableStudentsCount = () => {
+  if (activeTab.value === "leads" || activeTab.value === "trial") {
+    return students.value.length;
+  } else if (activeTab.value === "all") {
+    return activatableStudents.value.length;
+  }
+  return 0;
+};
+
+// Get students to pass to bulk activation modal
+const getActivatableStudents = () => {
+  if (activeTab.value === "leads" || activeTab.value === "trial") {
+    return students.value;
+  } else if (activeTab.value === "all") {
+    return activatableStudents.value;
+  }
+  return [];
+};
+
 // Load data on mount
 onMounted(() => {
   fetchGroupDetails();
   fetchStudents();
+  fetchActivatableStudents(); // Fetch all TRIAL/LEAD students for bulk activation
 });
 
 // Watch tab changes
@@ -642,6 +859,14 @@ watch(activeTab, () => {
               <span>{{ group.name }}</span>
             </div>
             <div class="d-flex gap-2">
+              <VBtn
+                color="info"
+                variant="elevated"
+                @click="showSendMessageModal = true"
+              >
+                <VIcon icon="tabler-send" class="me-1" />
+                Xabar yuborish
+              </VBtn>
               <VBtn color="primary" variant="outlined" @click="goToEdit">
                 <VIcon icon="tabler-edit" class="me-1" />
                 Tahrirlash
@@ -891,6 +1116,14 @@ watch(activeTab, () => {
             <VTab value="leads">Lead o'quvchilar</VTab>
             <VTab value="trial">Sinov darsidagi o'quvchilar</VTab>
             <VTab value="active">Aktiv o'quvchilar</VTab>
+            <VTab value="left_group">
+              <VIcon icon="tabler-logout" class="me-1" size="18" />
+              Guruhdan chiqqanlar
+            </VTab>
+            <VTab value="expelled">
+              <VIcon icon="tabler-user-off" class="me-1" size="18" />
+              Chetlatilganlar
+            </VTab>
             <VTab value="debtors">
               <VIcon icon="tabler-alert-triangle" class="me-1" size="18" />
               Qarzdorlar
@@ -1015,7 +1248,7 @@ watch(activeTab, () => {
 
           <!-- Students Tab Content -->
           <template v-else>
-            <!-- Search -->
+            <!-- Search and Bulk Actions -->
             <VCardText>
               <VRow>
                 <VCol cols="12" md="4">
@@ -1028,6 +1261,32 @@ watch(activeTab, () => {
                       <VIcon icon="tabler-search" />
                     </template>
                   </AppTextField>
+                </VCol>
+                <VCol
+                  v-if="activeTab !== 'debtors'"
+                  cols="12"
+                  md="8"
+                  class="d-flex justify-end align-center"
+                >
+                  <VBtn
+                    color="primary"
+                    variant="elevated"
+                    @click="openBulkActivationModal"
+                    :disabled="getActivatableStudentsCount() === 0"
+                    :loading="activatableStudentsLoading"
+                  >
+                    <VIcon icon="tabler-users-plus" class="me-1" />
+                    O'quvchilarni ommaviy faollashtirish
+                    <VChip
+                      v-if="getActivatableStudentsCount() > 0"
+                      size="small"
+                      color="white"
+                      text-color="primary"
+                      class="ms-2"
+                    >
+                      {{ getActivatableStudentsCount() }}
+                    </VChip>
+                  </VBtn>
                 </VCol>
               </VRow>
             </VCardText>
@@ -1118,29 +1377,55 @@ watch(activeTab, () => {
                     {{ formatDate(student.lessonStartDate) }}
                   </td>
                   <td v-if="activeTab === 'all'">
-                    <div class="d-flex gap-2">
-                      <VBtn
-                        size="small"
-                        color="secondary"
-                        variant="tonal"
-                        @click="openLessonStartDateModal(student)"
-                      >
-                        <VIcon
-                          icon="tabler-calendar-event"
-                          size="16"
-                          class="me-1"
-                        />
-                        Dars sanasi
-                      </VBtn>
-                      <VBtn
-                        size="small"
-                        color="primary"
-                        variant="tonal"
-                        @click="openDiscountModal(student)"
-                      >
-                        Chegirma
-                      </VBtn>
-                    </div>
+                    <VMenu>
+                      <template #activator="{props}">
+                        <VBtn
+                          size="small"
+                          color="primary"
+                          variant="tonal"
+                          v-bind="props"
+                        >
+                          Amallar
+                          <VIcon
+                            icon="tabler-chevron-down"
+                            size="16"
+                            class="ms-1"
+                          />
+                        </VBtn>
+                      </template>
+                      <VList>
+                        <VListItem
+                          v-if="
+                            student.status === 'TRIAL' ||
+                            student.status === 'LEAD'
+                          "
+                          @click="openActivationModal(student)"
+                        >
+                          <template #prepend>
+                            <VIcon icon="tabler-check" color="success" />
+                          </template>
+                          <VListItemTitle>Faollashtirish</VListItemTitle>
+                        </VListItem>
+                        <VListItem @click="openDiscountModal(student)">
+                          <template #prepend>
+                            <VIcon icon="tabler-discount" color="primary" />
+                          </template>
+                          <VListItemTitle>Chegirma belgilash</VListItemTitle>
+                        </VListItem>
+                        <VListItem @click="openAddBalanceModal(student)">
+                          <template #prepend>
+                            <VIcon icon="tabler-cash" color="success" />
+                          </template>
+                          <VListItemTitle>To'lov qo'shish</VListItemTitle>
+                        </VListItem>
+                        <VListItem @click="openExpelModal(student)">
+                          <template #prepend>
+                            <VIcon icon="tabler-user-x" color="error" />
+                          </template>
+                          <VListItemTitle>Guruhdan chetlatish</VListItemTitle>
+                        </VListItem>
+                      </VList>
+                    </VMenu>
                   </td>
                 </tr>
               </tbody>
@@ -1358,11 +1643,11 @@ watch(activeTab, () => {
     </VCard>
   </VDialog>
 
-  <!-- Lesson Start Date Modal -->
+  <!-- Student Activation Modal -->
   <VDialog v-model="showLessonStartDateModal" max-width="500">
     <VCard v-if="selectedLessonEnrollment">
       <VCardTitle class="text-h5 pt-4 px-6">
-        Dars boshlanish sanasini o'zgartirish
+        O'quvchini faollashtirish
       </VCardTitle>
 
       <VDivider />
@@ -1376,8 +1661,17 @@ watch(activeTab, () => {
             {{ selectedLessonEnrollment.student.lastName }}
           </div>
           <div class="text-body-2 mt-1">
-            <strong>Joriy dars boshlanish sanasi:</strong>
-            {{ formatDate(selectedLessonEnrollment.lessonStartDate) }}
+            <strong>Status:</strong>
+            <VChip
+              :color="
+                getStudentStatusConfig(selectedLessonEnrollment.status).color
+              "
+              size="small"
+              variant="tonal"
+              class="ms-2"
+            >
+              {{ getStudentStatusConfig(selectedLessonEnrollment.status).text }}
+            </VChip>
           </div>
         </VAlert>
 
@@ -1394,13 +1688,13 @@ watch(activeTab, () => {
         <!-- Date Picker -->
         <AppDateTimePicker
           v-model="lessonStartDateForm.lessonStartDate"
-          placeholder="Yangi dars boshlanish sanasini tanlang"
+          placeholder="Dars boshlanish sanasini tanlang"
           :config="{
             dateFormat: 'Y-m-d',
             minDate: group.courseStartDate,
             maxDate: group.courseEndDate,
           }"
-          label="Yangi dars boshlanish sanasi *"
+          label="Dars boshlanish sanasi *"
         />
       </VCardText>
 
@@ -1417,11 +1711,11 @@ watch(activeTab, () => {
         <VBtn
           color="primary"
           variant="elevated"
-          @click="saveLessonStartDate"
+          @click="activateStudent"
           :loading="lessonStartDateLoading"
           :disabled="lessonStartDateLoading"
         >
-          Saqlash
+          Faollashtirish
         </VBtn>
       </VCardActions>
     </VCard>
@@ -1582,4 +1876,201 @@ watch(activeTab, () => {
       </VCardActions>
     </VCard>
   </VDialog>
+
+  <!-- Add Balance Modal -->
+  <VDialog v-model="showAddBalanceModal" max-width="600">
+    <VCard v-if="selectedBalanceEnrollment">
+      <VCardTitle class="text-h5 pt-4 px-6">
+        <VIcon icon="tabler-cash" class="me-2" color="success" />
+        To'lov qo'shish
+      </VCardTitle>
+
+      <VDivider />
+
+      <VCardText>
+        <!-- Student Info -->
+        <VAlert type="info" variant="tonal" class="mb-4">
+          <div class="text-body-1">
+            <strong>O'quvchi:</strong>
+            {{ selectedBalanceEnrollment.student.firstName }}
+            {{ selectedBalanceEnrollment.student.lastName }}
+          </div>
+          <div class="text-body-2 mt-1">
+            <strong class="mr-2">Hozirgi balans:</strong>
+            <span
+              :class="{
+                'text-success': selectedBalanceEnrollment.balance > 0,
+                'text-error': selectedBalanceEnrollment.balance < 0,
+              }"
+            >
+              {{ prettyMoney(selectedBalanceEnrollment.balance) }} so'm
+            </span>
+          </div>
+        </VAlert>
+
+        <VRow>
+          <!-- Amount Input -->
+          <VCol cols="12">
+            <AppTextField
+              v-model="balanceForm.amountDisplay"
+              label="To'lov summasi *"
+              placeholder="50 000"
+              @input="formatBalanceAmount($event.target.value)"
+            >
+              <template #append-inner>
+                <span class="text-body-2 text-medium-emphasis">so'm</span>
+              </template>
+            </AppTextField>
+          </VCol>
+
+          <!-- Notes Input -->
+          <VCol cols="12">
+            <AppTextarea
+              v-model="balanceForm.notes"
+              label="Izoh"
+              placeholder="Masalan: Telegram orqali qabul qilingan to'lov"
+              rows="3"
+            />
+          </VCol>
+        </VRow>
+
+        <!-- Preview new balance -->
+        <VAlert
+          v-if="balanceForm.amount > 0"
+          type="success"
+          variant="tonal"
+          density="compact"
+          class="mt-2"
+        >
+          <div class="text-body-2">
+            Yangi balans:
+            {{
+              prettyMoney(
+                Number(selectedBalanceEnrollment.balance) + balanceForm.amount
+              )
+            }}
+            so'm
+          </div>
+        </VAlert>
+      </VCardText>
+
+      <VCardActions>
+        <VSpacer />
+        <VBtn
+          color="secondary"
+          variant="outlined"
+          @click="showAddBalanceModal = false"
+          :disabled="balanceLoading"
+        >
+          Bekor qilish
+        </VBtn>
+        <VBtn
+          color="success"
+          variant="elevated"
+          @click="addBalance"
+          :loading="balanceLoading"
+          :disabled="balanceLoading || balanceForm.amount <= 0"
+        >
+          <VIcon icon="tabler-check" class="me-1" />
+          Qo'shish
+        </VBtn>
+      </VCardActions>
+    </VCard>
+  </VDialog>
+
+  <!-- Individual Expel Modal -->
+  <VDialog v-model="showExpelModal" max-width="600">
+    <VCard v-if="selectedExpelEnrollment">
+      <VCardTitle class="text-h5 pt-4 px-6">
+        <VIcon icon="tabler-user-x" class="me-2" color="error" />
+        Guruhdan chetlatish
+      </VCardTitle>
+
+      <VDivider />
+
+      <VCardText>
+        <!-- Student Info -->
+        <VAlert type="info" variant="tonal" class="mb-4">
+          <div class="text-body-1">
+            <strong>O'quvchi:</strong>
+            {{ selectedExpelEnrollment.student.firstName }}
+            {{ selectedExpelEnrollment.student.lastName }}
+          </div>
+          <div class="text-body-2 mt-1">
+            <strong>Status:</strong>
+            <VChip
+              :color="
+                getStudentStatusConfig(selectedExpelEnrollment.status).color
+              "
+              size="small"
+              variant="tonal"
+              class="ms-2"
+            >
+              {{ getStudentStatusConfig(selectedExpelEnrollment.status).text }}
+            </VChip>
+          </div>
+        </VAlert>
+
+        <!-- Warning -->
+        <VAlert type="warning" variant="tonal" class="mb-4">
+          <div class="text-body-2">
+            <VIcon icon="tabler-alert-triangle" size="18" class="me-1" />
+            Diqqat! Bu amal qaytarib bo'lmaydi. O'quvchi guruhdan butunlay
+            chiqariladi va Telegram guruhidan ban qilinadi.
+          </div>
+        </VAlert>
+
+        <!-- Reason Input -->
+        <AppTextarea
+          v-model="expelForm.reason"
+          label="Sabab (ixtiyoriy)"
+          placeholder="Masalan: 3 oy to'lov qilmadingiz"
+          rows="3"
+          hint="Sabab o'quvchiga Telegram orqali yuboriladi"
+          persistent-hint
+        />
+      </VCardText>
+
+      <VCardActions>
+        <VSpacer />
+        <VBtn
+          color="secondary"
+          variant="outlined"
+          @click="showExpelModal = false"
+          :disabled="expelLoading"
+        >
+          Bekor qilish
+        </VBtn>
+        <VBtn
+          color="error"
+          variant="elevated"
+          @click="expelStudent"
+          :loading="expelLoading"
+          :disabled="expelLoading"
+        >
+          <VIcon icon="tabler-user-x" class="me-1" />
+          Chetlatish
+        </VBtn>
+      </VCardActions>
+    </VCard>
+  </VDialog>
+
+  <!-- Bulk Activation Modal -->
+  <BulkActivationModal
+    v-if="group"
+    v-model="showBulkActivationModal"
+    :group-id="groupId"
+    :students="getActivatableStudents()"
+    :course-start-date="group.courseStartDate"
+    :course-end-date="group.courseEndDate"
+    @activation-success="handleBulkActivationSuccess"
+  />
+
+  <!-- Send Message Modal -->
+  <SendMessageModal
+    v-if="group"
+    v-model="showSendMessageModal"
+    :group-id="groupId"
+    @message-sent="showSendMessageModal = false"
+  />
 </template>

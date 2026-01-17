@@ -40,8 +40,9 @@ const connectToken = ref("");
 
 // Payment type options
 const paymentTypes = [
-  {value: "START_TO_END_OF_MONTH", title: "Oyning boshidan oxirigacha"},
+  // {value: "START_TO_END_OF_MONTH", title: "Oyning boshidan oxirigacha"},
   {value: "MONTHLY_SAME_DATE", title: "Har oy bir xil sanada"},
+  {value: "ONE_TIME", title: "Butun kurs davri uchun(masalan 2 oy uchun)"},
   {value: "LESSON_BASED", title: "Darslar asosida"},
 ];
 
@@ -63,6 +64,7 @@ const paymentTypeDescription = computed(() => {
       "Dars boshlanish sanasidan oyni oxirigacha hisoblanadi va keyingi oylar to'liq 1 oy hisoblanadi.",
     MONTHLY_SAME_DATE:
       "Dars boshlangan sanadan boshlab keyingi oyning shu sanasigacha 1 oy hisoblanadi.",
+    ONE_TIME: "Butun kurs davri uchun shu narx bir marta yechiladi",
     LESSON_BASED:
       "Bunda yozgan darslar sonidan kelib chiqib 1 oylik pul hisoblanadi. Masalan: 12 ta dars 1 oy deb hisoblanadi.",
   };
@@ -496,19 +498,8 @@ onMounted(() => {
                 />
               </VCol>
 
-              <!-- Monthly Price -->
-              <VCol cols="12" md="6">
-                <AppTextField
-                  v-model="form.monthlyPriceDisplay"
-                  label="Oylik to'lov (so'm) *"
-                  placeholder="500 000"
-                  :rules="[rules.required]"
-                  @input="formatMoneyInput($event.target.value)"
-                />
-              </VCol>
-
               <!-- Description -->
-              <VCol cols="12">
+              <VCol cols="6">
                 <AppTextarea
                   v-model="form.description"
                   label="Tavsif - kurs haqida ma'lumot"
@@ -575,6 +566,21 @@ onMounted(() => {
                   label="To'lov davridagi darslar soni *"
                   placeholder="12"
                   :rules="[rules.requiredNumber, rules.positiveNumber]"
+                />
+              </VCol>
+
+              <!-- Monthly Price -->
+              <VCol cols="12" md="6">
+                <AppTextField
+                  v-model="form.monthlyPriceDisplay"
+                  :label="
+                    form.paymentType === 'ONE_TIME'
+                      ? 'Butun davr uchun narx'
+                      : 'Oylik to\'lov (so\'m) *'
+                  "
+                  placeholder="500 000"
+                  :rules="[rules.required]"
+                  @input="formatMoneyInput($event.target.value)"
                 />
               </VCol>
 

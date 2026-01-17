@@ -1,1 +1,7 @@
 // Write your overrides
+.vdp-datepicker__calendar,
+.flatpickr-calendar,
+.your-datepicker-class {
+  z-index: 9999 !important; /* Use a high value */
+  position: fixed !important; /* Sometimes position: fixed works better inside modals */
+}
