@@ -15,6 +15,16 @@ export default [
     icon: {icon: "tabler-users-group"},
   },
   {
+    title: "O'quvchilar",
+    to: {name: "students"},
+    icon: {icon: "tabler-school"},
+  },
+  {
+    title: "To'lovlar",
+    to: {name: "payments-history"},
+    icon: {icon: "tabler-cash"},
+  },
+  {
     title: "Cheklarni tasdiqlash",
     to: {name: "payments"},
     icon: {icon: "tabler-receipt"},

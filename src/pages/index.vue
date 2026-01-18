@@ -1,179 +1,305 @@
 <script setup>
-import {$api} from "@/utils/api";
+import {useDashboard} from "@/composables/useDashboard";
+import DashboardStatsCard from "@/components/dashboard/DashboardStatsCard.vue";
+import DashboardChart from "@/components/dashboard/DashboardChart.vue";
+import {prettyMoney} from "@/utils/utils";
+import AppDateTimePicker from "@/@core/components/app-form-elements/AppDateTimePicker.vue";
 
-const loading = ref({
-  deductBalances: false,
-  checkLowBalance: false,
-  notifyDebtors: false,
-});
+const {stats, loading, fetchStats} = useDashboard();
 
-const results = ref({
-  deductBalances: null,
-  checkLowBalance: null,
-  notifyDebtors: null,
-});
+// Date range state
+const dateRange = ref("THIS_MONTH");
+const startDate = ref("");
+const endDate = ref("");
 
-const deductBalances = async () => {
-  loading.value.deductBalances = true;
-  results.value.deductBalances = null;
-  try {
-    const response = await $api("/v1/tasks/deduct-balances", {
-      method: "POST",
-    });
-    results.value.deductBalances = {success: true, data: response};
-  } catch (error) {
-    results.value.deductBalances = {
-      success: false,
-      error: error.message || "Xatolik yuz berdi",
-    };
-  } finally {
-    loading.value.deductBalances = false;
+const dateRangeOptions = [
+  {title: "Bugun", value: "TODAY"},
+  {title: "Oxirgi 7 kun", value: "LAST_7_DAYS"},
+  {title: "Bu oy", value: "THIS_MONTH"},
+  {title: "O'tgan oy", value: "LAST_MONTH"},
+  {title: "Barchasi", value: "ALL"},
+];
+
+const calculateDateRange = (range) => {
+  const today = new Date();
+  const start = new Date(today);
+  const end = new Date(today);
+  const fmt = (d) => d.toISOString().split("T")[0];
+
+  switch (range) {
+    case "TODAY":
+      return {start: fmt(start), end: fmt(end)};
+    case "LAST_7_DAYS":
+      start.setDate(today.getDate() - 7);
+      return {start: fmt(start), end: fmt(end)};
+    case "THIS_MONTH":
+      start.setDate(1);
+      return {start: fmt(start), end: fmt(end)};
+    case "LAST_MONTH":
+      start.setMonth(today.getMonth() - 1);
+      start.setDate(1);
+      end.setDate(0);
+      return {start: fmt(start), end: fmt(end)};
+    case "ALL":
+      return {start: "", end: ""};
+    default:
+      return {start: "", end: ""};
   }
 };
 
-const checkLowBalance = async () => {
-  loading.value.checkLowBalance = true;
-  results.value.checkLowBalance = null;
-  try {
-    const response = await $api("/v1/tasks/check-low-balance", {
-      method: "POST",
-    });
-    results.value.checkLowBalance = {success: true, data: response};
-  } catch (error) {
-    results.value.checkLowBalance = {
-      success: false,
-      error: error.message || "Xatolik yuz berdi",
-    };
-  } finally {
-    loading.value.checkLowBalance = false;
-  }
+const onDateRangeChange = (val) => {
+  const {start, end} = calculateDateRange(val);
+  startDate.value = start;
+  endDate.value = end;
+  refreshStats();
 };
 
-const notifyDebtors = async () => {
-  loading.value.notifyDebtors = true;
-  results.value.notifyDebtors = null;
-  try {
-    const response = await $api("/v1/tasks/notify-debtors", {
-      method: "POST",
-    });
-    results.value.notifyDebtors = {success: true, data: response};
-  } catch (error) {
-    results.value.notifyDebtors = {
-      success: false,
-      error: error.message || "Xatolik yuz berdi",
-    };
-  } finally {
-    loading.value.notifyDebtors = false;
-  }
+const refreshStats = () => {
+  fetchStats({
+    startDate: startDate.value || undefined,
+    endDate: endDate.value || undefined,
+  });
+};
+
+// Initial Load
+onMounted(() => {
+  // Set default range
+  const {start, end} = calculateDateRange("THIS_MONTH");
+  startDate.value = start;
+  endDate.value = end;
+  refreshStats();
+});
+
+// Format helpers
+const formatDate = (date) => {
+  if (!date) return "-";
+  return new Date(date).toLocaleDateString("uz-UZ", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+// Status colors
+const getPaymentStatusColor = (status) => {
+  const map = {
+    PAID: "success",
+    PENDING: "warning",
+    CANCELLED: "error",
+    OVERDUE: "error",
+    REFUNDED: "info",
+  };
+  return map[status] || "secondary";
+};
+
+const getStatusText = (status) => {
+  const map = {
+    PAID: "Tasdiqlangan",
+    PENDING: "Kutilmoqda",
+    CANCELLED: "Bekor qilingan",
+    OVERDUE: "Muddati o'tgan",
+    REFUNDED: "Qaytarilgan",
+  };
+  return map[status] || status;
 };
 </script>
 
 <template>
   <div>
-    <VCard class="mb-6" title="Tez kunda statistikalarni ham qo'shamiz 🚀">
-    </VCard>
+    <!-- Header & Filters -->
+    <VRow class="mb-4 align-center">
+      <VCol cols="12" md="6">
+        <h2 class="text-h4 font-weight-bold">Dashboard</h2>
+      </VCol>
+      <VCol cols="12" md="6">
+        <VRow class="justify-end">
+          <VCol cols="12" md="4">
+            <VSelect
+              v-model="dateRange"
+              :items="dateRangeOptions"
+              label="Davr"
+              density="compact"
+              hide-details
+              @update:model-value="onDateRangeChange"
+            />
+          </VCol>
+          <VCol cols="6" md="4">
+            <AppDateTimePicker
+              v-model="startDate"
+              placeholder="Dan"
+              density="compact"
+              hide-details
+              @update:model-value="refreshStats"
+            />
+          </VCol>
+          <VCol cols="6" md="4">
+            <AppDateTimePicker
+              v-model="endDate"
+              placeholder="Gacha"
+              density="compact"
+              hide-details
+              @update:model-value="refreshStats"
+            />
+          </VCol>
+        </VRow>
+      </VCol>
+    </VRow>
 
-    <!-- Cron Job Test Buttons -->
-    <VCard class="mb-6" title="🔧 Cron Joblarni Test Qilish">
-      <VCardText>
-        <p class="text-body-2 mb-4">
-          Cron joblarni ishlashini kutmasdan sinab ko'rish uchun quyidagi
-          buttonlardan foydalaning.
-        </p>
+    <!-- KPI Cards -->
+    <VRow>
+      <VCol cols="12" sm="6" md="3">
+        <DashboardStatsCard
+          title="Jami tushum"
+          :value="prettyMoney(stats?.metrics?.revenue || 0) + ' so\'m'"
+          icon="tabler-currency-dollar"
+          color="success"
+          :loading="loading"
+        />
+      </VCol>
+      <VCol cols="12" sm="6" md="3">
+        <DashboardStatsCard
+          title="Yangi o'quvchilar"
+          :value="stats?.metrics?.newStudents || 0"
+          icon="tabler-user-plus"
+          color="info"
+          :loading="loading"
+        />
+      </VCol>
+      <VCol cols="12" sm="6" md="3">
+        <DashboardStatsCard
+          title="Faol o'quvchilar"
+          :value="stats?.metrics?.activeStudents || 0"
+          icon="tabler-users"
+          color="primary"
+          :loading="loading"
+        />
+      </VCol>
+      <VCol cols="12" sm="6" md="3">
+        <DashboardStatsCard
+          title="Faol guruhlar"
+          :value="stats?.metrics?.activeGroups || 0"
+          icon="tabler-school"
+          color="warning"
+          :loading="loading"
+        />
+      </VCol>
+    </VRow>
 
-        <div class="d-flex flex-wrap gap-4 mb-4">
-          <!-- Deduct Balances Button -->
-          <VBtn
-            color="warning"
-            :loading="loading.deductBalances"
-            @click="deductBalances"
-          >
-            <VIcon start icon="ri-money-dollar-circle-line" />
-            Kunlik Balance Yechish
-          </VBtn>
+    <!-- Chart -->
+    <VRow class="mt-2">
+      <VCol cols="12">
+        <DashboardChart :data="stats?.chart || []" :loading="loading" />
+      </VCol>
+    </VRow>
 
-          <!-- Check Low Balance Button -->
-          <VBtn
-            color="info"
-            :loading="loading.checkLowBalance"
-            @click="checkLowBalance"
-          >
-            <VIcon start icon="ri-alert-line" />
-            Kam Balans Tekshirish
-          </VBtn>
+    <!-- Tables Row -->
+    <VRow class="mt-2">
+      <!-- Recent Payments -->
+      <VCol cols="12" md="6">
+        <VCard title="Oxirgi to'lovlar">
+          <VTable>
+            <thead>
+              <tr>
+                <th>O'quvchi</th>
+                <th>Summa</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="loading">
+                <td colspan="3" class="text-center py-4">
+                  <VProgressCircular
+                    indeterminate
+                    size="20"
+                    width="2"
+                    color="primary"
+                  />
+                </td>
+              </tr>
+              <tr v-else-if="!stats?.recentPayments?.length">
+                <td colspan="3" class="text-center text-medium-emphasis py-4">
+                  To'lovlar yo'q
+                </td>
+              </tr>
+              <tr
+                v-else
+                v-for="payment in stats.recentPayments"
+                :key="payment.id"
+              >
+                <td>
+                  <div class="font-weight-medium">
+                    {{ payment.studentName }}
+                  </div>
+                  <div class="text-caption text-disabled">
+                    {{ payment.groupName }}
+                  </div>
+                </td>
+                <td class="font-weight-bold">
+                  {{ prettyMoney(payment.amount) }}
+                </td>
+                <td>
+                  <VChip
+                    size="x-small"
+                    :color="getPaymentStatusColor(payment.status)"
+                  >
+                    {{ getStatusText(payment.status) }}
+                  </VChip>
+                </td>
+              </tr>
+            </tbody>
+          </VTable>
+        </VCard>
+      </VCol>
 
-          <!-- Notify Debtors Button -->
-          <VBtn
-            color="error"
-            :loading="loading.notifyDebtors"
-            @click="notifyDebtors"
-          >
-            <VIcon start icon="ri-notification-line" />
-            Qarzdorlarga Xabar
-          </VBtn>
-        </div>
-
-        <!-- Results Section -->
-        <VExpandTransition>
-          <VAlert
-            v-if="results.deductBalances"
-            :type="results.deductBalances.success ? 'success' : 'error'"
-            variant="tonal"
-            class="mb-3"
-            closable
-            @click:close="results.deductBalances = null"
-          >
-            <VAlertTitle>Balance Yechish Natijasi</VAlertTitle>
-            <pre class="text-caption mt-2">{{
-              JSON.stringify(
-                results.deductBalances.data || results.deductBalances.error,
-                null,
-                2
-              )
-            }}</pre>
-          </VAlert>
-        </VExpandTransition>
-
-        <VExpandTransition>
-          <VAlert
-            v-if="results.checkLowBalance"
-            :type="results.checkLowBalance.success ? 'success' : 'error'"
-            variant="tonal"
-            class="mb-3"
-            closable
-            @click:close="results.checkLowBalance = null"
-          >
-            <VAlertTitle>Kam Balans Tekshirish Natijasi</VAlertTitle>
-            <pre class="text-caption mt-2">{{
-              JSON.stringify(
-                results.checkLowBalance.data || results.checkLowBalance.error,
-                null,
-                2
-              )
-            }}</pre>
-          </VAlert>
-        </VExpandTransition>
-
-        <VExpandTransition>
-          <VAlert
-            v-if="results.notifyDebtors"
-            :type="results.notifyDebtors.success ? 'success' : 'error'"
-            variant="tonal"
-            class="mb-3"
-            closable
-            @click:close="results.notifyDebtors = null"
-          >
-            <VAlertTitle>Qarzdorlarga Xabar Natijasi</VAlertTitle>
-            <pre class="text-caption mt-2">{{
-              JSON.stringify(
-                results.notifyDebtors.data || results.notifyDebtors.error,
-                null,
-                2
-              )
-            }}</pre>
-          </VAlert>
-        </VExpandTransition>
-      </VCardText>
-    </VCard>
+      <!-- Top Debtors -->
+      <VCol cols="12" md="6">
+        <VCard title="Eng katta qarzdorliklar">
+          <VTable>
+            <thead>
+              <tr>
+                <th>O'quvchi</th>
+                <th>Guruh</th>
+                <th>Qarz</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="loading">
+                <td colspan="3" class="text-center py-4">
+                  <VProgressCircular
+                    indeterminate
+                    size="20"
+                    width="2"
+                    color="primary"
+                  />
+                </td>
+              </tr>
+              <tr v-else-if="!stats?.topDebtors?.length">
+                <td colspan="3" class="text-center text-medium-emphasis py-4">
+                  Qarzdorlar yo'q
+                </td>
+              </tr>
+              <tr
+                v-else
+                v-for="debtor in stats.topDebtors"
+                :key="debtor.enrollmentId"
+              >
+                <td>
+                  <div class="font-weight-medium">{{ debtor.studentName }}</div>
+                  <div class="text-caption text-disabled">
+                    {{ debtor.phone }}
+                  </div>
+                </td>
+                <td>{{ debtor.groupName }}</td>
+                <td class="text-error font-weight-bold">
+                  {{ prettyMoney(debtor.balance) }}
+                </td>
+              </tr>
+            </tbody>
+          </VTable>
+        </VCard>
+      </VCol>
+    </VRow>
   </div>
 </template>

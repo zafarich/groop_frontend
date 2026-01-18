@@ -27,6 +27,7 @@ const form = ref({
   teachers: [{teacherId: null, isPrimary: true}],
   lessonSchedules: [{dayOfWeek: null, startTime: "", endTime: ""}],
   discounts: [],
+  studentsCanWrite: true,
 });
 
 const loading = ref(false);
@@ -393,6 +394,7 @@ const onSubmit = async () => {
               discountAmount: d.discountAmount,
             }))
           : undefined,
+      studentsCanWrite: form.value.studentsCanWrite,
     };
 
     const response = await $api("/v1/groups", {
@@ -499,13 +501,28 @@ onMounted(() => {
               </VCol>
 
               <!-- Description -->
-              <VCol cols="6">
+              <VCol cols="12" md="6">
                 <AppTextarea
                   v-model="form.description"
                   label="Tavsif - kurs haqida ma'lumot"
                   placeholder="Guruh haqida qisqacha ma'lumot..."
                   rows="3"
                 />
+                <VSwitch
+                  v-model="form.studentsCanWrite"
+                  label="Studentlar guruhga yoza oladimi?"
+                  color="primary"
+                  class="mt-2"
+                />
+                <VAlert
+                  type="info"
+                  variant="tonal"
+                  density="compact"
+                  class="mt-2"
+                >
+                  Buni yoqib qo'ysangiz o'quvchi qarzdor bo'lsa telegram guruhga
+                  yoza olmaydi
+                </VAlert>
               </VCol>
 
               <!-- Course Dates Section -->

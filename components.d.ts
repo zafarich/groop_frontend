@@ -42,6 +42,8 @@ declare module 'vue' {
     CustomRadios: typeof import('./src/@core/components/app-form-elements/CustomRadios.vue')['default']
     CustomRadiosWithIcon: typeof import('./src/@core/components/app-form-elements/CustomRadiosWithIcon.vue')['default']
     CustomRadiosWithImage: typeof import('./src/@core/components/app-form-elements/CustomRadiosWithImage.vue')['default']
+    DashboardChart: typeof import('./src/components/dashboard/DashboardChart.vue')['default']
+    DashboardStatsCard: typeof import('./src/components/dashboard/DashboardStatsCard.vue')['default']
     DialogCloseBtn: typeof import('./src/@core/components/DialogCloseBtn.vue')['default']
     DropZone: typeof import('./src/@core/components/DropZone.vue')['default']
     EnableOneTimePasswordDialog: typeof import('./src/components/dialogs/EnableOneTimePasswordDialog.vue')['default']
@@ -60,6 +62,7 @@ declare module 'vue' {
     SendMessageModal: typeof import('./src/components/groups/send-message-modal.vue')['default']
     ShareProjectDialog: typeof import('./src/components/dialogs/ShareProjectDialog.vue')['default']
     Shortcuts: typeof import('./src/@core/components/Shortcuts.vue')['default']
+    StudentMessageModal: typeof import('./src/components/groups/student-message-modal.vue')['default']
     TablePagination: typeof import('./src/@core/components/TablePagination.vue')['default']
     TelegramSetupModal: typeof import('./src/components/TelegramSetupModal.vue')['default']
     TheCustomizer: typeof import('./src/@core/components/TheCustomizer.vue')['default']
@@ -68,5 +71,6 @@ declare module 'vue' {
     TwoFactorAuthDialog: typeof import('./src/components/dialogs/TwoFactorAuthDialog.vue')['default']
     UserInfoEditDialog: typeof import('./src/components/dialogs/UserInfoEditDialog.vue')['default']
     UserUpgradePlanDialog: typeof import('./src/components/dialogs/UserUpgradePlanDialog.vue')['default']
+    VueApexCharts: typeof import('vue3-apexcharts')['default']
   }
 }

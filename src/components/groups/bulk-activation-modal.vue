@@ -58,7 +58,7 @@ const allSelected = computed({
 });
 
 const canActivate = computed(() => {
-  return selectedEnrollmentIds.value.length > 0 && lessonStartDate.value;
+  return props.students.length > 0 && lessonStartDate.value;
 });
 
 const warningCount = computed(() => {
@@ -177,11 +177,14 @@ const closeModal = () => {
   emit("update:modelValue", false);
 };
 
-// Watch for modal close to reset state
+// Watch for modal open/close to reset state and auto-select all students
 watch(
   () => props.modelValue,
   (newVal) => {
-    if (!newVal) {
+    if (newVal) {
+      // Auto-select all students when modal opens
+      selectedEnrollmentIds.value = props.students.map((s) => s.id);
+    } else {
       selectedEnrollmentIds.value = [];
       lessonStartDate.value = "";
       previewData.value = null;
@@ -215,6 +218,13 @@ watch(
       <VDivider />
 
       <VCardText>
+        <!-- Info Alert -->
+        <VAlert type="info" variant="tonal" class="mb-4">
+          Siz ommaviy ravishda faollashtirganda faqat sinov darsidagilar
+          faollashtiriladi. Qolgan holatlarda o'quvchining o'zini bittalab ham
+          faollashtirish mumkin.
+        </VAlert>
+
         <!-- Date Picker -->
         <VRow class="mb-4">
           <VCol cols="12" md="6">
@@ -230,95 +240,15 @@ watch(
           </VCol>
         </VRow>
 
-        <!-- Students Selection Table -->
+        <!-- Students Count Info (hidden detailed list) -->
         <VCard variant="outlined" class="mb-4">
-          <VCardTitle class="text-body-1">
-            O'quvchilarni tanlash
-            <VChip
-              v-if="selectedEnrollmentIds.length > 0"
-              size="small"
-              color="primary"
-              class="ms-2"
-            >
-              {{ selectedEnrollmentIds.length }} ta tanlangan
-            </VChip>
-          </VCardTitle>
-          <VDivider />
-          <VTable density="compact">
-            <thead>
-              <tr>
-                <th style="width: 50px">
-                  <VCheckbox
-                    v-model="allSelected"
-                    hide-details
-                    density="compact"
-                  />
-                </th>
-                <th>ID</th>
-                <th>Ism</th>
-                <th>Familiya</th>
-                <th>Telefon</th>
-                <th>Joriy balans</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-if="students.length === 0">
-                <td colspan="7" class="text-center py-4">
-                  <div class="text-body-2 text-medium-emphasis">
-                    Faollashtirish uchun o'quvchilar yo'q
-                  </div>
-                </td>
-              </tr>
-              <tr v-else v-for="student in students" :key="student.id">
-                <td>
-                  <VCheckbox
-                    :model-value="selectedEnrollmentIds.includes(student.id)"
-                    hide-details
-                    density="compact"
-                    @update:model-value="toggleStudent(student.id)"
-                  />
-                </td>
-                <td>{{ student.student.id }}</td>
-                <td>{{ student.student.firstName }}</td>
-                <td>{{ student.student.lastName }}</td>
-                <td>
-                  {{ prettyPhoneNumber(student.student.user.phoneNumber) }}
-                </td>
-                <td>
-                  <span
-                    :class="{
-                      'text-success': student.balance > 0,
-                      'text-error': student.balance < 0,
-                    }"
-                  >
-                    {{ prettyMoney(student.balance) }} so'm
-                  </span>
-                </td>
-                <td>
-                  <VChip
-                    :color="
-                      student.status === 'LEAD'
-                        ? 'info'
-                        : student.status === 'TRIAL'
-                          ? 'warning'
-                          : 'default'
-                    "
-                    size="small"
-                    variant="tonal"
-                  >
-                    {{
-                      student.status === "LEAD"
-                        ? "Lead"
-                        : student.status === "TRIAL"
-                          ? "Sinov"
-                          : student.status
-                    }}
-                  </VChip>
-                </td>
-              </tr>
-            </tbody>
-          </VTable>
+          <VCardText class="d-flex align-center justify-center py-4">
+            <VIcon icon="tabler-users" class="me-2" color="primary" />
+            <span class="text-body-1">
+              <strong>{{ students.length }}</strong> ta sinov o'quvchisi
+              faollashtiriladi
+            </span>
+          </VCardText>
         </VCard>
       </VCardText>
 
@@ -340,7 +270,7 @@ watch(
           @click="openConfirmDialog"
         >
           <VIcon icon="tabler-check" class="me-1" />
-          Tanlangan o'quvchilarni faollashtirish
+          Sinov o'quvchilarini faollashtirish
         </VBtn>
       </VCardActions>
     </VCard>

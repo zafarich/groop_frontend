@@ -364,6 +364,7 @@
     "prettyPhoneNumber": true,
     "useToast": true,
     "prettyMoney": true,
-    "usePayments": true
+    "usePayments": true,
+    "useDashboard": true
   }
 }

@@ -26,6 +26,7 @@ const form = ref({
   courseEndDate: "",
   paymentType: "MONTHLY_SAME_DATE",
   lessonsPerPaymentPeriod: null,
+  studentsCanWrite: true,
 });
 
 const loading = ref(false);
@@ -191,6 +192,7 @@ const fetchGroupDetails = async () => {
         courseEndDate: formatDateForDisplay(group.courseEndDate),
         paymentType: group.paymentType,
         lessonsPerPaymentPeriod: group.lessonsPerPaymentPeriod,
+        studentsCanWrite: group.studentsCanWrite ?? true,
       };
 
       // Load related data
@@ -442,6 +444,7 @@ const onSubmit = async () => {
         form.value.paymentType === "LESSON_BASED"
           ? form.value.lessonsPerPaymentPeriod
           : undefined,
+      studentsCanWrite: form.value.studentsCanWrite,
     };
 
     const response = await $api(`/v1/groups/${groupId.value}`, {
@@ -569,6 +572,21 @@ onMounted(() => {
                     placeholder="Guruh haqida qisqacha ma'lumot..."
                     rows="3"
                   />
+                  <VSwitch
+                    v-model="form.studentsCanWrite"
+                    label="Studentlar guruhga yoza oladimi?"
+                    color="primary"
+                    class="mt-2"
+                  />
+                  <VAlert
+                    type="info"
+                    variant="tonal"
+                    density="compact"
+                    class="mt-2"
+                  >
+                    Buni yoqib qo'ysangiz o'quvchi qarzdor bo'lsa telegram
+                    guruhga yoza olmaydi
+                  </VAlert>
                 </VCol>
 
                 <!-- Course Dates Section -->
