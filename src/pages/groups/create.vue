@@ -45,6 +45,7 @@ const loadingTeachers = ref(false);
 const showTelegramSetupModal = ref(false);
 const botUsername = ref("");
 const createdTelegramResourceType = ref("PRIVATE_GROUP");
+const createdConnectToken = ref("");
 
 // Payment type options
 const paymentTypes = [
@@ -456,15 +457,15 @@ const validateForm = () => {
   return true;
 };
 
-// Submit function
 // Watcher for resource type
 watch(
   () => form.value.telegramResourceType,
   (newType) => {
     if (newType === 'PRIVATE_CHANNEL') {
+      // For channels: force specific settings
       form.value.paymentType = 'MONTHLY_SAME_DATE';
+      form.value.trialPaymentType = 'OFF';
       form.value.studentsCanWrite = false;
-      // Optional: Clear other fields if desired, but hiding them is usually enough
     } else {
       form.value.studentsCanWrite = true;
     }
@@ -481,58 +482,56 @@ const onSubmit = async () => {
   errorMessage.value = "";
 
   try {
-    // Debug: Log original dates
-    console.log("Original dates:", {
-      courseStartDate: form.value.courseStartDate,
-      courseEndDate: form.value.courseEndDate,
-    });
+    const isChannel = form.value.telegramResourceType === 'PRIVATE_CHANNEL';
 
-    // Convert dates
-    const startDateISO = convertDateToISO(form.value.courseStartDate);
-    const endDateISO = convertDateToISO(form.value.courseEndDate);
+    // Convert dates (only for groups, not channels)
+    const startDateISO = isChannel ? undefined : convertDateToISO(form.value.courseStartDate);
+    const endDateISO = isChannel ? undefined : convertDateToISO(form.value.courseEndDate);
 
-    // Debug: Log converted dates
-    console.log("Converted dates:", {
-      courseStartDate: startDateISO,
-      courseEndDate: endDateISO,
-    });
-
+    // Build payload based on resource type
     const payload = {
       name: form.value.name,
       description: form.value.description || undefined,
       monthlyPrice: form.value.monthlyPrice,
-      wholePeriodPrice: form.value.wholePeriodPrice || undefined,
-      courseStartDate: startDateISO,
-      courseEndDate: endDateISO,
-      paymentType: form.value.paymentType,
-      trialPaymentType: form.value.trialPaymentType,
-      trialPrice:
-        form.value.trialPaymentType === "PAID"
-          ? form.value.trialPrice
-          : undefined,
-      lessonsPerPaymentPeriod:
-        form.value.paymentType === "LESSON_BASED"
-          ? form.value.lessonsPerPaymentPeriod
-          : undefined,
-      teachers: form.value.teachers.map((t) => ({
-        teacherId: t.teacherId,
-        isPrimary: t.isPrimary,
-      })),
-      lessonSchedules: form.value.lessonSchedules.map((s) => ({
-        dayOfWeek: s.dayOfWeek,
-        startTime: s.startTime,
-        endTime: s.endTime,
-      })),
-      discounts:
-        form.value.discounts.length > 0
-          ? form.value.discounts.map((d) => ({
-              months: d.months,
-              discountAmount: d.discountAmount,
-            }))
-          : undefined,
-      studentsCanWrite: form.value.studentsCanWrite,
       telegramResourceType: form.value.telegramResourceType,
+      // For channels: force these values, don't send optional fields
+      studentsCanWrite: isChannel ? false : form.value.studentsCanWrite,
     };
+
+    // Add group-specific fields only for PRIVATE_GROUP
+    if (!isChannel) {
+      Object.assign(payload, {
+        wholePeriodPrice: form.value.wholePeriodPrice || undefined,
+        courseStartDate: startDateISO,
+        courseEndDate: endDateISO,
+        paymentType: form.value.paymentType,
+        trialPaymentType: form.value.trialPaymentType,
+        trialPrice:
+          form.value.trialPaymentType === "PAID"
+            ? form.value.trialPrice
+            : undefined,
+        lessonsPerPaymentPeriod:
+          form.value.paymentType === "LESSON_BASED"
+            ? form.value.lessonsPerPaymentPeriod
+            : undefined,
+        teachers: form.value.teachers.map((t) => ({
+          teacherId: t.teacherId,
+          isPrimary: t.isPrimary,
+        })),
+        lessonSchedules: form.value.lessonSchedules.map((s) => ({
+          dayOfWeek: s.dayOfWeek,
+          startTime: s.startTime,
+          endTime: s.endTime,
+        })),
+        discounts:
+          form.value.discounts.length > 0
+            ? form.value.discounts.map((d) => ({
+                months: d.months,
+                discountAmount: d.discountAmount,
+              }))
+            : undefined,
+      });
+    }
 
     const response = await $api("/v1/groups", {
       method: "POST",
@@ -547,6 +546,7 @@ const onSubmit = async () => {
       createdTelegramResourceType.value =
         response.setupInstructions?.telegramResourceType ||
         form.value.telegramResourceType;
+      createdConnectToken.value = response.setupInstructions?.connectToken || "";
       showTelegramSetupModal.value = true;
     } else {
       errorMessage.value = response.message || "Xatolik yuz berdi";
@@ -1078,6 +1078,7 @@ onMounted(() => {
     v-model="showTelegramSetupModal"
     :bot-username="botUsername"
     :telegram-resource-type="createdTelegramResourceType"
+    :connect-token="createdConnectToken"
     @close="handleSetupModalClose"
   />
 </template>

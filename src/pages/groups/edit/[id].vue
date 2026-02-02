@@ -16,6 +16,10 @@ const {success: showSuccess, error: showError} = useToast();
 
 const groupId = computed(() => route.params.id);
 
+// Group type detection
+const groupType = ref(null); // 'PRIVATE_GROUP' or 'PRIVATE_CHANNEL'
+const isChannel = computed(() => groupType.value === 'PRIVATE_CHANNEL');
+
 // Form data
 const form = ref({
   name: "",
@@ -254,6 +258,10 @@ const fetchGroupDetails = async () => {
 
     if (response.success && response.data) {
       const group = response.data;
+
+      // Set group type for conditional rendering
+      groupType.value = group.telegramResourceType || 'PRIVATE_GROUP';
+
       form.value = {
         name: group.name,
         description: group.description || "",
@@ -268,7 +276,7 @@ const fetchGroupDetails = async () => {
         studentsCanWrite: group.studentsCanWrite ?? true,
       };
 
-      // Load related data
+      // Load related data (only for groups, not channels)
       teachers.value = group.groupTeachers || [];
       schedules.value = group.lessonSchedules || [];
       discounts.value = group.discounts || [];
@@ -456,7 +464,7 @@ const validateForm = () => {
   errorMessage.value = "";
 
   if (!form.value.name) {
-    errorMessage.value = "Guruh nomini kiriting";
+    errorMessage.value = isChannel.value ? "Kanal nomini kiriting" : "Guruh nomini kiriting";
     return false;
   }
 
@@ -465,29 +473,32 @@ const validateForm = () => {
     return false;
   }
 
-  if (!form.value.courseStartDate) {
-    errorMessage.value = "Kurs boshlanish sanasini kiriting";
-    return false;
-  }
+  // Skip course dates and payment type validation for channels
+  if (!isChannel.value) {
+    if (!form.value.courseStartDate) {
+      errorMessage.value = "Kurs boshlanish sanasini kiriting";
+      return false;
+    }
 
-  if (!form.value.courseEndDate) {
-    errorMessage.value = "Kurs tugash sanasini kiriting";
-    return false;
-  }
+    if (!form.value.courseEndDate) {
+      errorMessage.value = "Kurs tugash sanasini kiriting";
+      return false;
+    }
 
-  if (!form.value.paymentType) {
-    errorMessage.value = "To'lov turini tanlang";
-    return false;
-  }
+    if (!form.value.paymentType) {
+      errorMessage.value = "To'lov turini tanlang";
+      return false;
+    }
 
-  // Validate lessons per payment period for LESSON_BASED
-  if (
-    form.value.paymentType === "LESSON_BASED" &&
-    (!form.value.lessonsPerPaymentPeriod ||
-      form.value.lessonsPerPaymentPeriod < 1)
-  ) {
-    errorMessage.value = "Darslar sonini kiriting";
-    return false;
+    // Validate lessons per payment period for LESSON_BASED
+    if (
+      form.value.paymentType === "LESSON_BASED" &&
+      (!form.value.lessonsPerPaymentPeriod ||
+        form.value.lessonsPerPaymentPeriod < 1)
+    ) {
+      errorMessage.value = "Darslar sonini kiriting";
+      return false;
+    }
   }
 
   return true;
@@ -503,23 +514,30 @@ const onSubmit = async () => {
   errorMessage.value = "";
 
   try {
-    const startDateISO = convertDateToISO(form.value.courseStartDate);
-    const endDateISO = convertDateToISO(form.value.courseEndDate);
-
+    // Base payload for both channels and groups
     const payload = {
       name: form.value.name,
       description: form.value.description || undefined,
       monthlyPrice: form.value.monthlyPrice,
-      wholePeriodPrice: form.value.wholePeriodPrice || undefined,
-      courseStartDate: startDateISO,
-      courseEndDate: endDateISO,
-      paymentType: form.value.paymentType,
-      lessonsPerPaymentPeriod:
-        form.value.paymentType === "LESSON_BASED"
-          ? form.value.lessonsPerPaymentPeriod
-          : undefined,
       studentsCanWrite: form.value.studentsCanWrite,
     };
+
+    // Add group-specific fields only for groups (not channels)
+    if (!isChannel.value) {
+      const startDateISO = convertDateToISO(form.value.courseStartDate);
+      const endDateISO = convertDateToISO(form.value.courseEndDate);
+
+      Object.assign(payload, {
+        wholePeriodPrice: form.value.wholePeriodPrice || undefined,
+        courseStartDate: startDateISO,
+        courseEndDate: endDateISO,
+        paymentType: form.value.paymentType,
+        lessonsPerPaymentPeriod:
+          form.value.paymentType === "LESSON_BASED"
+            ? form.value.lessonsPerPaymentPeriod
+            : undefined,
+      });
+    }
 
     const response = await $api(`/v1/groups/${groupId.value}`, {
       method: "PATCH",
@@ -527,7 +545,7 @@ const onSubmit = async () => {
     });
 
     if (response.success) {
-      showSuccess("Guruh muvaffaqiyatli yangilandi!");
+      showSuccess(isChannel.value ? "Kanal muvaffaqiyatli yangilandi!" : "Guruh muvaffaqiyatli yangilandi!");
       router.push(`/groups/${groupId.value}`);
     } else {
       errorMessage.value = response.message || "Xatolik yuz berdi";
@@ -536,7 +554,7 @@ const onSubmit = async () => {
     errorMessage.value =
       error.data?.message ||
       error.message ||
-      "Guruh yangilashda xatolik yuz berdi";
+      (isChannel.value ? "Kanal yangilashda xatolik yuz berdi" : "Guruh yangilashda xatolik yuz berdi");
   } finally {
     loading.value = false;
   }
@@ -592,7 +610,7 @@ onMounted(() => {
         <VCard class="mb-4">
           <VCardTitle class="d-flex align-center">
             <VIcon icon="tabler-edit" class="me-2" />
-            <span>Guruhni tahrirlash</span>
+            <span>{{ isChannel ? 'Kanalni tahrirlash' : 'Guruhni tahrirlash' }}</span>
           </VCardTitle>
 
           <VDivider />
@@ -617,12 +635,12 @@ onMounted(() => {
                   <h3 class="text-h5">Asosiy ma'lumotlar</h3>
                 </VCol>
 
-                <!-- Group Name -->
+                <!-- Group/Channel Name -->
                 <VCol cols="12" md="6">
                   <AppTextField
                     v-model="form.name"
-                    label="Guruh nomi *"
-                    placeholder="Guruh nomini kiriting"
+                    :label="isChannel ? 'Kanal nomi *' : 'Guruh nomi *'"
+                    :placeholder="isChannel ? 'Kanal nomini kiriting' : 'Guruh nomini kiriting'"
                     :rules="[rules.required]"
                   />
                 </VCol>
@@ -638,8 +656,8 @@ onMounted(() => {
                   />
                 </VCol>
 
-                <!-- Whole Period Price -->
-                <VCol cols="12" md="6">
+                <!-- Whole Period Price (hidden for channels) -->
+                <VCol v-if="!isChannel" cols="12" md="6">
                   <AppTextField
                     v-model="form.wholePeriodPriceDisplay"
                     label="Butun davr uchun narx (ixtiyoriy)"
@@ -652,8 +670,8 @@ onMounted(() => {
                   </AppTextField>
                 </VCol>
 
-                <!-- Pricing Summary -->
-                <VCol cols="12" v-if="courseDurationMonths > 0 && form.monthlyPrice">
+                <!-- Pricing Summary (hidden for channels) -->
+                <VCol cols="12" v-if="!isChannel && courseDurationMonths > 0 && form.monthlyPrice">
                   <VCard variant="tonal" color="info" class="pa-4">
                     <div class="text-subtitle-1 font-weight-bold mb-3">
                       Narxlar taqqoslash ({{ courseDurationMonths }} oy uchun)
@@ -712,82 +730,84 @@ onMounted(() => {
                   </VAlert>
                 </VCol>
 
-                <!-- Course Dates Section -->
-                <VCol cols="12">
-                  <h2 class="text-h5 mt-3">Kurs muddati</h2>
-                </VCol>
+                <!-- Course Dates Section (hidden for channels) -->
+                <template v-if="!isChannel">
+                  <VCol cols="12">
+                    <h2 class="text-h5 mt-3">Kurs muddati</h2>
+                  </VCol>
 
-                <!-- Course Start Date -->
-                <VCol cols="12" md="6">
-                  <AppDateTimePicker
-                    v-model="form.courseStartDate"
-                    placeholder="Boshlash sanasini tanlang"
-                    :config="{dateFormat: 'd.m.Y'}"
-                    label="Kurs boshlanish sanasi *"
-                    :rules="[rules.required]"
+                  <!-- Course Start Date -->
+                  <VCol cols="12" md="6">
+                    <AppDateTimePicker
+                      v-model="form.courseStartDate"
+                      placeholder="Boshlash sanasini tanlang"
+                      :config="{dateFormat: 'd.m.Y'}"
+                      label="Kurs boshlanish sanasi *"
+                      :rules="[rules.required]"
+                    >
+                      <template #append-inner>
+                        <VIcon icon="tabler-calendar" />
+                      </template>
+                    </AppDateTimePicker>
+                  </VCol>
+
+                  <!-- Course End Date -->
+                  <VCol cols="12" md="6">
+                    <AppDateTimePicker
+                      v-model="form.courseEndDate"
+                      placeholder="Tugash sanasini tanlang"
+                      :config="{dateFormat: 'd.m.Y'}"
+                      label="Kurs tugash sanasi *"
+                      :rules="[rules.required]"
+                    >
+                      <template #append-inner>
+                        <VIcon icon="tabler-calendar" />
+                      </template>
+                    </AppDateTimePicker>
+                  </VCol>
+
+                  <!-- Payment Configuration Section -->
+                  <VCol cols="12">
+                    <h3 class="text-h5 mt-4">To'lov sozlamalari</h3>
+                  </VCol>
+
+                  <!-- Payment Type -->
+                  <VCol cols="12" md="6">
+                    <AppSelect
+                      v-model="form.paymentType"
+                      :items="paymentTypes"
+                      label="To'lov turi *"
+                      :rules="[rules.required]"
+                    />
+                  </VCol>
+
+                  <!-- Lessons Per Payment Period (conditional) -->
+                  <VCol
+                    v-if="form.paymentType === 'LESSON_BASED'"
+                    cols="12"
+                    md="6"
                   >
-                    <template #append-inner>
-                      <VIcon icon="tabler-calendar" />
-                    </template>
-                  </AppDateTimePicker>
-                </VCol>
+                    <AppTextField
+                      v-model.number="form.lessonsPerPaymentPeriod"
+                      type="number"
+                      label="To'lov davridagi darslar soni *"
+                      placeholder="12"
+                      :rules="[rules.requiredNumber, rules.positiveNumber]"
+                    />
+                  </VCol>
 
-                <!-- Course End Date -->
-                <VCol cols="12" md="6">
-                  <AppDateTimePicker
-                    v-model="form.courseEndDate"
-                    placeholder="Tugash sanasini tanlang"
-                    :config="{dateFormat: 'd.m.Y'}"
-                    label="Kurs tugash sanasi *"
-                    :rules="[rules.required]"
-                  >
-                    <template #append-inner>
-                      <VIcon icon="tabler-calendar" />
-                    </template>
-                  </AppDateTimePicker>
-                </VCol>
-
-                <!-- Payment Configuration Section -->
-                <VCol cols="12">
-                  <h3 class="text-h5 mt-4">To'lov sozlamalari</h3>
-                </VCol>
-
-                <!-- Payment Type -->
-                <VCol cols="12" md="6">
-                  <AppSelect
-                    v-model="form.paymentType"
-                    :items="paymentTypes"
-                    label="To'lov turi *"
-                    :rules="[rules.required]"
-                  />
-                </VCol>
-
-                <!-- Lessons Per Payment Period (conditional) -->
-                <VCol
-                  v-if="form.paymentType === 'LESSON_BASED'"
-                  cols="12"
-                  md="6"
-                >
-                  <AppTextField
-                    v-model.number="form.lessonsPerPaymentPeriod"
-                    type="number"
-                    label="To'lov davridagi darslar soni *"
-                    placeholder="12"
-                    :rules="[rules.requiredNumber, rules.positiveNumber]"
-                  />
-                </VCol>
-
-                <!-- Payment Type Info -->
-                <VCol cols="12" v-if="paymentTypeDescription">
-                  <VAlert
-                    type="info"
-                    variant="tonal"
-                    density="compact"
-                    class="mb-0"
-                  >
-                    {{ paymentTypeDescription }}
-                  </VAlert>
-                </VCol>
+                  <!-- Payment Type Info -->
+                  <VCol cols="12" v-if="paymentTypeDescription">
+                    <VAlert
+                      type="info"
+                      variant="tonal"
+                      density="compact"
+                      class="mb-0"
+                    >
+                      {{ paymentTypeDescription }}
+                    </VAlert>
+                  </VCol>
+                </template>
 
                 <!-- Action Buttons -->
                 <VCol cols="12" class="d-flex gap-4 mt-4">
@@ -809,8 +829,8 @@ onMounted(() => {
           </VCardText>
         </VCard>
 
-        <!-- Teachers Management Card -->
-        <VCard class="mb-4">
+        <!-- Teachers Management Card (hidden for channels) -->
+        <VCard v-if="!isChannel" class="mb-4">
           <VCardTitle class="d-flex align-center justify-space-between">
             <div class="d-flex align-center">
               <VIcon icon="tabler-users" class="me-2" />
@@ -868,8 +888,8 @@ onMounted(() => {
           </VCardText>
         </VCard>
 
-        <!-- Lesson Schedules Management Card -->
-        <VCard class="mb-4">
+        <!-- Lesson Schedules Management Card (hidden for channels) -->
+        <VCard v-if="!isChannel" class="mb-4">
           <VCardTitle class="d-flex align-center justify-space-between">
             <div class="d-flex align-center">
               <VIcon icon="tabler-calendar-time" class="me-2" />
@@ -916,8 +936,8 @@ onMounted(() => {
           </VCardText>
         </VCard>
 
-        <!-- Discounts Management Card -->
-        <VCard class="mb-4">
+        <!-- Discounts Management Card (hidden for channels) -->
+        <VCard v-if="!isChannel" class="mb-4">
           <VCardTitle class="d-flex align-center justify-space-between">
             <div class="d-flex align-center">
               <VIcon icon="tabler-discount" class="me-2" />

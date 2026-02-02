@@ -13,6 +13,7 @@ const router = useRouter();
 // Telegram setup modal state
 const showTelegramSetupModal = ref(false);
 const connectToken = ref("");
+const selectedResourceType = ref("PRIVATE_GROUP");
 
 // State
 const groups = ref([]);
@@ -124,8 +125,9 @@ const goToCreate = () => {
 };
 
 // Open telegram setup modal
-const openTelegramSetupModal = (token) => {
+const openTelegramSetupModal = (token, resourceType = "PRIVATE_GROUP") => {
   connectToken.value = token;
+  selectedResourceType.value = resourceType;
   showTelegramSetupModal.value = true;
 };
 
@@ -276,7 +278,7 @@ useQueryParams({
                   color="info"
                   variant="text"
                   prepend-icon="tabler-link"
-                  @click="openTelegramSetupModal(group.connectToken)"
+                  @click="openTelegramSetupModal(group.connectToken, group.telegramResourceType)"
                 >
                   Telegram guruhga ulash
                 </VBtn>
@@ -350,6 +352,7 @@ useQueryParams({
   <TelegramSetupModal
     v-model="showTelegramSetupModal"
     :connect-token="connectToken"
+    :telegram-resource-type="selectedResourceType"
     @close="handleSetupModalClose"
   />
   <!-- Delete Confirmation Dialog -->

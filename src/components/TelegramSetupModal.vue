@@ -14,6 +14,10 @@ const props = defineProps({
     type: String,
     default: "PRIVATE_GROUP",
   },
+  connectToken: {
+    type: String,
+    default: "",
+  },
 });
 
 const emit = defineEmits(["update:modelValue", "close"]);
@@ -36,6 +40,18 @@ const copyBotUsername = async () => {
     showSuccess("Bot nomi nusxalandi!");
   } catch (error) {
     console.error("Failed to copy bot username:", error);
+  }
+};
+
+// Copy connect command to clipboard
+const copyConnectCommand = async () => {
+  if (!props.connectToken) return;
+
+  try {
+    await navigator.clipboard.writeText(`/connect ${props.connectToken}`);
+    showSuccess("Ulash buyrug'i nusxalandi!");
+  } catch (error) {
+    console.error("Failed to copy connect command:", error);
   }
 };
 
@@ -136,13 +152,23 @@ const handleClose = () => {
             </VListItem>
             <VListItem class="px-0">
               <template #prepend>
-                <VAvatar size="24" color="success" variant="tonal" class="me-3">
-                  <VIcon icon="tabler-check" size="14" />
+                <VAvatar size="24" color="primary" variant="tonal" class="me-3">
+                  <span class="text-caption font-weight-bold">4</span>
                 </VAvatar>
               </template>
               <VListItemTitle class="text-body-2 text-wrap">
-                Bot admin bo'lgandan keyin sizga shaxsiy xabar orqali guruhni
-                tanlash tugmasi keladi
+                Guruhingizda quyidagi buyruqni yuboring:
+                <VChip
+                  v-if="connectToken"
+                  variant="outlined"
+                  color="success"
+                  class="px-2 py-1 cursor-pointer ml-2 font-weight-bold"
+                  append-icon="tabler-copy"
+                  size="sm"
+                  @click="copyConnectCommand"
+                >
+                  /connect {{ connectToken.substring(0, 8) }}...
+                </VChip>
               </VListItemTitle>
             </VListItem>
           </VList>
@@ -151,9 +177,9 @@ const handleClose = () => {
         <!-- Success Note -->
         <VAlert type="success" variant="tonal" class="mt-4">
           <div class="text-body-2">
-            <strong>Muhim:</strong> Bot admin bo'lganidan keyin sizga Telegramda
-            xabar keladi. Shu xabardagi tugmani bosib, qaysi guruhni ulash
-            kerakligini tanlaysiz.
+            <strong>Muhim:</strong> <code>/connect</code> buyrug'ini yuborganingizdan
+            so'ng, guruh avtomatik ravishda tizimga ulanadi va o'quvchilar
+            qo'shilishi mumkin bo'ladi.
           </div>
         </VAlert>
       </VCardText>

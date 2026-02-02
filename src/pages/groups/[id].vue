@@ -24,6 +24,9 @@ const {success: showSuccess, error: showError} = useToast();
 const groupId = computed(() => route.params.id);
 const group = ref(null);
 const loading = ref(false);
+
+// Channel type detection
+const isChannel = computed(() => group.value?.telegramResourceType === 'PRIVATE_CHANNEL');
 const activeTab = ref("students");
 const studentStatusFilter = ref("all");
 
@@ -444,8 +447,9 @@ const onStatusChange = async () => {
     });
 
     if (response.success) {
+      const typeLabel = isChannel.value ? 'Kanal' : 'Guruh';
       showSuccess(
-        `Guruh ${newStatus === "ACTIVE" ? "faollashtirildi" : "faolsizlantirildi"}`,
+        `${typeLabel} ${newStatus === "ACTIVE" ? "faollashtirildi" : "faolsizlantirildi"}`,
       );
       isStatusDialogVisible.value = false;
       fetchGroupDetails();
@@ -584,14 +588,14 @@ const activateStudent = async () => {
     );
 
     if (response.success) {
-      showSuccess("O'quvchi muvaffaqiyatli faollashtirildi!");
+      showSuccess(isChannel.value ? "Obunachi muvaffaqiyatli faollashtirildi!" : "O'quvchi muvaffaqiyatli faollashtirildi!");
       showLessonStartDateModal.value = false;
       await fetchStudents();
     }
   } catch (error) {
     console.error("Error activating student:", error);
     showError(
-      error.data?.message || "O'quvchini faollashtiriishda xatolik yuz berdi",
+      error.data?.message || (isChannel.value ? "Obunachini faollashtiriishda xatolik yuz berdi" : "O'quvchini faollashtiriishda xatolik yuz berdi"),
     );
   } finally {
     lessonStartDateLoading.value = false;
@@ -806,7 +810,7 @@ const expelStudent = async () => {
     );
 
     if (response.success) {
-      showSuccess("O'quvchi muvaffaqiyatli guruhdan chiqarildi!");
+      showSuccess(isChannel.value ? "Obunachi muvaffaqiyatli kanaldan chiqarildi!" : "O'quvchi muvaffaqiyatli guruhdan chiqarildi!");
       showExpelModal.value = false;
       await fetchStudents();
       // Also refresh debtors if student was in debt
@@ -930,11 +934,23 @@ watch(studentStatusFilter, () => {
         <VCardText class="d-flex flex-column gap-y-4">
           <!-- Header -->
           <div class="d-flex align-center mb-2">
-            <VIcon icon="tabler-users-group" class="me-2" size="24" />
+            <VIcon :icon="isChannel ? 'tabler-broadcast' : 'tabler-users-group'" class="me-2" size="24" />
             <span class="text-h6 text-truncate" :title="group.name">{{
               group.name
             }}</span>
           </div>
+
+          <!-- Channel/Group Type Badge -->
+          <VChip
+            v-if="isChannel"
+            color="info"
+            size="small"
+            variant="tonal"
+            class="mb-2"
+          >
+            <VIcon icon="tabler-broadcast" size="14" class="me-1" />
+            Kanal
+          </VChip>
 
           <!-- Status Chip -->
           <div>
@@ -983,9 +999,9 @@ watch(studentStatusFilter, () => {
           <!-- Info List -->
           <VList density="compact" class="bg-transparent pa-0">
             <VListItem class="px-0">
-              <VListItemTitle class="text-caption text-medium-emphasis"
-                >Guruh ID</VListItemTitle
-              >
+              <VListItemTitle class="text-caption text-medium-emphasis">
+                {{ isChannel ? 'Kanal ID' : 'Guruh ID' }}
+              </VListItemTitle>
               <VListItemSubtitle class="text-body-2 text-high-emphasis">{{
                 group.id
               }}</VListItemSubtitle>
@@ -1000,7 +1016,8 @@ watch(studentStatusFilter, () => {
               >
             </VListItem>
 
-            <VListItem class="px-0">
+            <!-- Payment Type (hidden for channels) -->
+            <VListItem v-if="!isChannel" class="px-0">
               <VListItemTitle class="text-caption text-medium-emphasis"
                 >To'lov turi</VListItemTitle
               >
@@ -1009,7 +1026,8 @@ watch(studentStatusFilter, () => {
               }}</VListItemSubtitle>
             </VListItem>
 
-            <VListItem class="px-0">
+            <!-- Course Start Date (hidden for channels) -->
+            <VListItem v-if="!isChannel" class="px-0">
               <VListItemTitle class="text-caption text-medium-emphasis"
                 >Boshlanish sanasi</VListItemTitle
               >
@@ -1018,7 +1036,8 @@ watch(studentStatusFilter, () => {
               }}</VListItemSubtitle>
             </VListItem>
 
-            <VListItem class="px-0">
+            <!-- Course End Date (hidden for channels) -->
+            <VListItem v-if="!isChannel" class="px-0">
               <VListItemTitle class="text-caption text-medium-emphasis"
                 >Tugash sanasi</VListItemTitle
               >
@@ -1027,7 +1046,8 @@ watch(studentStatusFilter, () => {
               }}</VListItemSubtitle>
             </VListItem>
 
-            <VListItem class="px-0">
+            <!-- Lesson Schedule (hidden for channels) -->
+            <VListItem v-if="!isChannel" class="px-0">
               <VListItemTitle class="text-caption text-medium-emphasis"
                 >Dars jadvali</VListItemTitle
               >
@@ -1037,21 +1057,23 @@ watch(studentStatusFilter, () => {
             </VListItem>
           </VList>
 
-          <VDivider />
+          <!-- Teachers (hidden for channels) -->
+          <template v-if="!isChannel">
+            <VDivider />
 
-          <!-- Teachers -->
-          <div>
-            <div class="text-caption text-medium-emphasis mb-1">
-              O'qituvchilar
+            <div>
+              <div class="text-caption text-medium-emphasis mb-1">
+                O'qituvchilar
+              </div>
+              <div
+                v-for="teacher in group.groupTeachers"
+                :key="teacher.id"
+                class="text-body-2 font-weight-medium"
+              >
+                {{ teacher.teacher.firstName }} {{ teacher.teacher.lastName }}
+              </div>
             </div>
-            <div
-              v-for="teacher in group.groupTeachers"
-              :key="teacher.id"
-              class="text-body-2 font-weight-medium"
-            >
-              {{ teacher.teacher.firstName }} {{ teacher.teacher.lastName }}
-            </div>
-          </div>
+          </template>
 
           <!-- Telegram -->
           <div
@@ -1089,12 +1111,12 @@ watch(studentStatusFilter, () => {
         <VCardTitle class="d-flex justify-space-between align-center py-3">
           <div class="d-flex align-center">
             <VIcon icon="tabler-users" class="me-2" />
-            O'quvchilar
+            {{ isChannel ? 'Obunachilar' : "O'quvchilar" }}
           </div>
         </VCardTitle>
 
         <VTabs v-model="activeTab" bg-color="transparent">
-          <VTab value="students">O'quvchilar</VTab>
+          <VTab value="students">{{ isChannel ? 'Obunachilar' : "O'quvchilar" }}</VTab>
           <VTab value="debtors">
             <VIcon icon="tabler-alert-triangle" class="me-1" size="18" />
             Qarzdorlar
@@ -1421,7 +1443,7 @@ watch(studentStatusFilter, () => {
               <tr v-else-if="students.length === 0">
                 <td colspan="4" class="text-center py-8">
                   <div class="text-body-1 text-medium-emphasis">
-                    O'quvchilar topilmadi
+                    {{ isChannel ? 'Obunachilar topilmadi' : "O'quvchilar topilmadi" }}
                   </div>
                 </td>
               </tr>
@@ -1588,6 +1610,7 @@ watch(studentStatusFilter, () => {
     v-if="group"
     v-model="showTelegramSetupModal"
     :connect-token="group.connectToken"
+    :telegram-resource-type="group.telegramResourceType"
     @close="handleSetupModalClose"
   />
 
@@ -1596,7 +1619,7 @@ watch(studentStatusFilter, () => {
     <VCard>
       <VCardTitle class="text-h5 pt-4 px-6"> Statusni o'zgartirish </VCardTitle>
       <VCardText>
-        Siz haqiqatan ham guruh statusini
+        Siz haqiqatan ham {{ isChannel ? 'kanal' : 'guruh' }} statusini
         <strong>{{
           group?.isActive ? "faolsizlantirmoqchi" : "faollashtirmoqchi"
         }}</strong>
@@ -1792,8 +1815,8 @@ watch(studentStatusFilter, () => {
           </div>
         </VAlert>
 
-        <!-- Course Date Range Info -->
-        <VAlert type="warning" variant="tonal" density="compact" class="mb-4">
+        <!-- Course Date Range Info (hidden for channels) -->
+        <VAlert v-if="!isChannel && group.courseStartDate && group.courseEndDate" type="warning" variant="tonal" density="compact" class="mb-4">
           <div class="text-body-2">
             <VIcon icon="tabler-info-circle" size="16" class="me-1" />
             Sana kurs davri ichida bo'lishi kerak:
@@ -1805,13 +1828,13 @@ watch(studentStatusFilter, () => {
         <!-- Date Picker -->
         <AppDateTimePicker
           v-model="lessonStartDateForm.lessonStartDate"
-          placeholder="Dars boshlanish sanasini tanlang"
+          :placeholder="isChannel ? 'Obuna boshlanish sanasini tanlang' : 'Dars boshlanish sanasini tanlang'"
           :config="{
             dateFormat: 'Y-m-d',
-            minDate: group.courseStartDate,
-            maxDate: group.courseEndDate,
+            minDate: isChannel ? undefined : group.courseStartDate,
+            maxDate: isChannel ? undefined : group.courseEndDate,
           }"
-          label="Dars boshlanish sanasi *"
+          :label="isChannel ? 'Obuna boshlanish sanasi *' : 'Dars boshlanish sanasi *'"
         />
       </VCardText>
 
@@ -2100,7 +2123,7 @@ watch(studentStatusFilter, () => {
     <VCard v-if="selectedExpelEnrollment">
       <VCardTitle class="text-h5 pt-4 px-6">
         <VIcon icon="tabler-user-x" class="me-2" color="error" />
-        Guruhdan chetlatish
+        {{ isChannel ? 'Kanaldan chetlatish' : 'Guruhdan chetlatish' }}
       </VCardTitle>
 
       <VDivider />
@@ -2109,7 +2132,7 @@ watch(studentStatusFilter, () => {
         <!-- Student Info -->
         <VAlert type="info" variant="tonal" class="mb-4">
           <div class="text-body-1">
-            <strong>O'quvchi:</strong>
+            <strong>{{ isChannel ? 'Obunachi:' : "O'quvchi:" }}</strong>
             {{ selectedExpelEnrollment.student.firstName }}
             {{ selectedExpelEnrollment.student.lastName }}
           </div>
@@ -2132,8 +2155,7 @@ watch(studentStatusFilter, () => {
         <VAlert type="warning" variant="tonal" class="mb-4">
           <div class="text-body-2">
             <VIcon icon="tabler-alert-triangle" size="18" class="me-1" />
-            Diqqat! Bu amal qaytarib bo'lmaydi. O'quvchi guruhdan butunlay
-            chiqariladi va Telegram guruhidan ban qilinadi.
+            Diqqat! Bu amal qaytarib bo'lmaydi. {{ isChannel ? 'Obunachi kanaldan butunlay chiqariladi va Telegram kanalidan ban qilinadi.' : "O'quvchi guruhdan butunlay chiqariladi va Telegram guruhidan ban qilinadi." }}
           </div>
         </VAlert>
 
