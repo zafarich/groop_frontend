@@ -61,6 +61,26 @@ const selectedExpelEnrollment = ref(null);
 const expelForm = ref({reason: ""});
 const expelLoading = ref(false);
 
+// Edit Payment Modal
+const showEditPaymentModal = ref(false);
+const selectedPayment = ref(null);
+const editPaymentForm = ref({
+  amount: 0,
+  amountDisplay: "",
+  notes: "",
+  paymentMethod: "",
+  paidAt: "",
+});
+const editPaymentLoading = ref(false);
+
+// Delete Payment Modal
+const showDeletePaymentModal = ref(false);
+const deletePaymentLoading = ref(false);
+
+// Receipt Modal
+const showReceiptModal = ref(false);
+const selectedReceiptUrl = ref("");
+
 // -- Data Fetching --
 
 const fetchStudent = async () => {
@@ -155,6 +175,11 @@ const formatStatus = (status) => {
   const map = {
     ACTIVE: {color: "success", text: "Faol", icon: "tabler-check"},
     TRIAL: {color: "info", text: "Sinov", icon: "tabler-clock"},
+    PENDING_JOIN: {
+      color: "info",
+      text: "Guruhga ulanish kutilmoqda",
+      icon: "tabler-clock",
+    },
     LEAD: {color: "warning", text: "Lid", icon: "tabler-user-plus"},
     FROZEN: {color: "secondary", text: "Muzlatilgan", icon: "tabler-snowflake"},
     EXPELLED: {color: "error", text: "Chetlatilgan", icon: "tabler-ban"},
@@ -216,7 +241,7 @@ const onBalanceSubmit = async () => {
           amount: balanceForm.value.amount,
           notes: balanceForm.value.notes,
         },
-      }
+      },
     );
     if (res.success) {
       showSuccess("Balans to'ldirildi");
@@ -260,7 +285,7 @@ const onDiscountSubmit = async () => {
           discountEndDate: discountForm.value.discountEndDate || null,
           discountReason: discountForm.value.discountReason,
         },
-      }
+      },
     );
     if (res.success) {
       showSuccess("Chegirma belgilandi");
@@ -291,7 +316,7 @@ const onExpelSubmit = async () => {
       {
         method: "PATCH",
         body: {reason: expelForm.value.reason},
-      }
+      },
     );
     if (res.success) {
       showSuccess("Guruhdan chetlatildi");
@@ -321,7 +346,7 @@ const updateActivationPreview = async () => {
   if (!activationForm.value.lessonStartDate) return;
   try {
     const res = await $api(
-      `/v1/enrollments/${selectedActivationEnrollment.value.enrollmentId}/activation-preview?lessonStartDate=${activationForm.value.lessonStartDate}`
+      `/v1/enrollments/${selectedActivationEnrollment.value.enrollmentId}/activation-preview?lessonStartDate=${activationForm.value.lessonStartDate}`,
     );
     if (res.success) {
       activationPreview.value = res.data;
@@ -339,7 +364,7 @@ const onActivationSubmit = async () => {
       {
         method: "PATCH",
         body: {lessonStartDate: activationForm.value.lessonStartDate},
-      }
+      },
     );
     if (res.success) {
       showSuccess("O'quvchi faollashtirildi");
@@ -355,16 +380,90 @@ const onActivationSubmit = async () => {
   }
 };
 
+// Edit Payment
+const openEditPaymentModal = (payment) => {
+  selectedPayment.value = payment;
+  const amount = parseFloat(payment.amount);
+  editPaymentForm.value = {
+    amount: amount,
+    amountDisplay: prettyMoney(amount),
+    notes: payment.notes || "",
+    paymentMethod: payment.paymentMethod || "CASH",
+    paidAt: payment.paidAt ? new Date(payment.paidAt).toISOString().split('T')[0] : "",
+  };
+  showEditPaymentModal.value = true;
+};
+
+const onEditPaymentSubmit = async () => {
+  editPaymentLoading.value = true;
+  try {
+    const res = await $api(`/v1/payments/${selectedPayment.value.id}`, {
+      method: "PATCH",
+      body: {
+        amount: editPaymentForm.value.amount,
+      },
+    });
+    if (res.success) {
+      showSuccess("To'lov tahrirlandi");
+      showEditPaymentModal.value = false;
+      refreshAll();
+    } else {
+      showError(res.message);
+    }
+  } catch (e) {
+    showError(e.data?.message || "Xatolik");
+  } finally {
+    editPaymentLoading.value = false;
+  }
+};
+
+// Delete Payment
+const openDeletePaymentModal = (payment) => {
+  selectedPayment.value = payment;
+  showDeletePaymentModal.value = true;
+};
+
+const onDeletePaymentSubmit = async () => {
+  deletePaymentLoading.value = true;
+  try {
+    const res = await $api(`/v1/payments/${selectedPayment.value.id}`, {
+      method: "DELETE",
+    });
+    if (res.success) {
+      showSuccess("To'lov o'chirildi");
+      showDeletePaymentModal.value = false;
+      refreshAll();
+    } else {
+      showError(res.message);
+    }
+  } catch (e) {
+    showError(e.data?.message || "Xatolik");
+  } finally {
+    deletePaymentLoading.value = false;
+  }
+};
+
+const openReceiptModal = (url) => {
+  selectedReceiptUrl.value = url;
+  showReceiptModal.value = true;
+};
+
 // Helper for masking money input
-const onMoneyInput = (val, formRef, key, displayKey) => {
+const onMoneyInput = (val, form, key, displayKey) => {
+  // Handle both ref and object
+  const target = form.value ? form.value : form;
+  
   if (!val) {
-    formRef.value[key] = 0;
-    formRef.value[displayKey] = "";
+    target[key] = 0;
+    target[displayKey] = "";
     return;
   }
-  const num = parseInt(val.replace(/\D/g, "") || "0", 10);
-  formRef.value[key] = num;
-  formRef.value[displayKey] = prettyMoney(num);
+  // Allow digits and dots, remove spaces
+  const cleanVal = val.toString().replace(/[^\d.]/g, "");
+  const num = parseFloat(cleanVal || "0");
+  
+  target[key] = num;
+  target[displayKey] = prettyMoney(num);
 };
 </script>
 
@@ -406,9 +505,9 @@ const onMoneyInput = (val, formRef, key, displayKey) => {
               </div>
             </div>
             <div class="text-end">
-              <VChip :color="student?.isActive ? 'success' : 'error'">
+              <!-- <VChip :color="student?.isActive ? 'success' : 'error'">
                 {{ student?.isActive ? "Faol o'quvchi" : "Nofaol" }}
-              </VChip>
+              </VChip> -->
               <div class="mt-2 text-caption">ID: {{ student?.id }}</div>
               <div class="text-caption">
                 Ro'yxatdan o'tgan: {{ formatDate(student?.createdAt) }}
@@ -582,6 +681,7 @@ const onMoneyInput = (val, formRef, key, displayKey) => {
                 <th>Summa</th>
                 <th>Sana</th>
                 <th>Amal turi</th>
+                <th>Amallar</th>
               </tr>
             </thead>
             <tbody>
@@ -596,9 +696,44 @@ const onMoneyInput = (val, formRef, key, displayKey) => {
                     >To'lov</VChip
                   >
                 </td>
+                <td>
+                  <div class="d-flex gap-2">
+                    <VBtn
+                      icon
+                      variant="text"
+                      size="small"
+                      :color="p.receiptUrl ? 'info' : 'secondary'"
+                      :disabled="!p.receiptUrl"
+                      @click="openReceiptModal(p.receiptUrl)"
+                      title="Chekni ko'rish"
+                    >
+                      <VIcon icon="tabler-eye" size="20" />
+                    </VBtn>
+                    <VBtn
+                      icon
+                      variant="text"
+                      size="small"
+                      color="primary"
+                      @click="openEditPaymentModal(p)"
+                      title="Tahrirlash"
+                    >
+                      <VIcon icon="tabler-edit" size="20" />
+                    </VBtn>
+                    <VBtn
+                      icon
+                      variant="text"
+                      size="small"
+                      color="error"
+                      @click="openDeletePaymentModal(p)"
+                      title="O'chirish"
+                    >
+                      <VIcon icon="tabler-trash" size="20" />
+                    </VBtn>
+                  </div>
+                </td>
               </tr>
               <tr v-if="payments.length === 0">
-                <td colspan="4" class="text-center py-4 text-disabled">
+                <td colspan="5" class="text-center py-4 text-disabled">
                   To'lovlar tarixi bo'sh
                 </td>
               </tr>
@@ -612,8 +747,8 @@ const onMoneyInput = (val, formRef, key, displayKey) => {
             <thead>
               <tr>
                 <th>Guruh</th>
-                <th>Eski Status</th>
-                <th>Yangi Status</th>
+                <th>Turi</th>
+                <th>Tafsilotlar</th>
                 <th>Sabab</th>
                 <th>Sana</th>
               </tr>
@@ -622,12 +757,53 @@ const onMoneyInput = (val, formRef, key, displayKey) => {
               <tr v-for="log in statusLogs" :key="log.id">
                 <td>{{ log.groupName }}</td>
                 <td>
-                  <VChip v-bind="formatStatus(log.fromStatus)" size="small" />
+                  <VChip
+                    v-if="log.type === 'STATUS_CHANGE' || !log.type"
+                    color="primary"
+                    size="small"
+                    variant="tonal"
+                  >
+                    Status o'zgarishi
+                  </VChip>
+                  <VChip
+                    v-else-if="log.type === 'DISCOUNT_ASSIGNED'"
+                    color="warning"
+                    size="small"
+                    variant="tonal"
+                  >
+                    Chegirma
+                  </VChip>
+                  <VChip v-else size="small" variant="tonal">{{ log.type }}</VChip>
                 </td>
                 <td>
-                  <VChip v-bind="formatStatus(log.toStatus)" size="small" />
+                  <!-- Status Change Details -->
+                  <div v-if="log.type === 'STATUS_CHANGE' || !log.type" class="d-flex align-center gap-2">
+                    <VChip v-bind="formatStatus(log.fromStatus)" size="x-small" />
+                    <VIcon icon="tabler-arrow-right" size="14" class="text-medium-emphasis" />
+                    <VChip v-bind="formatStatus(log.toStatus)" size="x-small" />
+                  </div>
+                  
+                  <!-- Discount Details -->
+                  <div v-else-if="log.type === 'DISCOUNT_ASSIGNED' && log.data">
+                    <div class="text-caption mb-1">
+                      <span class="text-medium-emphasis">Oylik: </span>
+                      <span class="text-decoration-line-through me-1">{{ prettyMoney(log.data.groupMonthlyPrice) }}</span>
+                      <VIcon icon="tabler-arrow-right" size="12" class="me-1" />
+                      <span class="font-weight-bold text-success">{{ prettyMoney(log.data.customMonthlyPrice) }}</span>
+                    </div>
+                    <div class="text-caption text-medium-emphasis" style="font-size: 0.7rem;">
+                      Dars narxi: {{ prettyMoney(log.data.oldLessonPrice) }} → {{ prettyMoney(log.data.newLessonPrice) }}
+                    </div>
+                    <div v-if="log.data.retroactiveRefund" class="text-caption text-info mt-1">
+                      <VIcon icon="tabler-receipt-refund" size="14" class="me-1" />
+                      Qaytarildi: {{ prettyMoney(log.data.retroactiveRefund) }}
+                    </div>
+                  </div>
+                  <span v-else>-</span>
                 </td>
-                <td>{{ log.reason || "-" }}</td>
+                <td class="text-wrap" style="max-width: 200px;">
+                  {{ log.reason || "-" }}
+                </td>
                 <td>{{ formatDate(log.createdAt) }}</td>
               </tr>
               <tr v-if="statusLogs.length === 0">
@@ -650,14 +826,7 @@ const onMoneyInput = (val, formRef, key, displayKey) => {
           <AppTextField
             v-model="balanceForm.amountDisplay"
             label="Summa"
-            @input="
-              onMoneyInput(
-                $event.target.value,
-                balanceForm,
-                'amount',
-                'amountDisplay'
-              )
-            "
+            @update:model-value="val => onMoneyInput(val, balanceForm, 'amount', 'amountDisplay')"
           />
           <AppTextField v-model="balanceForm.notes" label="Izoh" class="mt-3" />
         </VCardText>
@@ -684,14 +853,7 @@ const onMoneyInput = (val, formRef, key, displayKey) => {
           <AppTextField
             v-model="discountForm.customMonthlyPriceDisplay"
             label="Maxsus oylik narx"
-            @input="
-              onMoneyInput(
-                $event.target.value,
-                discountForm,
-                'customMonthlyPrice',
-                'customMonthlyPriceDisplay'
-              )
-            "
+            @update:model-value="val => onMoneyInput(val, discountForm, 'customMonthlyPrice', 'customMonthlyPriceDisplay')"
             class="mb-3"
           />
           <VRow>
@@ -792,6 +954,107 @@ const onMoneyInput = (val, formRef, key, displayKey) => {
             @click="onActivationSubmit"
             >Faollashtirish</VBtn
           >
+        </VCardActions>
+      </VCard>
+    </VDialog>
+
+    <!-- Edit Payment Modal -->
+    <VDialog v-model="showEditPaymentModal" max-width="500">
+      <VCard title="To'lovni tahrirlash">
+        <VCardText>
+          <VAlert
+            color="warning"
+            variant="tonal"
+            icon="tabler-alert-circle"
+            class="mb-4"
+            density="compact"
+          >
+            Summani o'zgartirish o'quvchi balansiga ta'sir qiladi.
+          </VAlert>
+          <AppTextField
+            v-model="editPaymentForm.amountDisplay"
+            label="Summa"
+            @update:model-value="val => onMoneyInput(val, editPaymentForm, 'amount', 'amountDisplay')"
+            class="mb-3"
+          />
+        </VCardText>
+        <VCardActions>
+          <VSpacer />
+          <VBtn variant="text" @click="showEditPaymentModal = false"
+            >Bekor qilish</VBtn
+          >
+          <VBtn
+            color="primary"
+            variant="elevated"
+            :loading="editPaymentLoading"
+            @click="onEditPaymentSubmit"
+            >Saqlash</VBtn
+          >
+        </VCardActions>
+      </VCard>
+    </VDialog>
+
+    <!-- Delete Payment Modal -->
+    <VDialog v-model="showDeletePaymentModal" max-width="400">
+      <VCard title="To'lovni o'chirish">
+        <VCardText>
+          <VAlert
+            color="error"
+            variant="tonal"
+            icon="tabler-alert-triangle"
+            class="mb-4"
+          >
+            Diqqat! To'lov o'chirilganda o'quvchi balansidan ushbu summa ayirib tashlanadi (qarz paydo bo'lishi mumkin).
+          </VAlert>
+          <p>Haqiqatan ham ushbu to'lovni o'chirmoqchimisiz?</p>
+          <div class="d-flex align-center justify-space-between mt-2 pa-3 bg-grey-100 rounded">
+             <span class="text-body-2">Summa:</span>
+             <span class="font-weight-bold">{{ prettyMoney(selectedPayment?.amount) }} UZS</span>
+          </div>
+        </VCardText>
+        <VCardActions>
+          <VSpacer />
+          <VBtn variant="text" @click="showDeletePaymentModal = false"
+            >Bekor qilish</VBtn
+          >
+          <VBtn
+            color="error"
+            variant="elevated"
+            :loading="deletePaymentLoading"
+            @click="onDeletePaymentSubmit"
+            >O'chirish</VBtn
+          >
+        </VCardActions>
+      </VCard>
+    </VDialog>
+
+    <!-- Receipt Modal -->
+    <VDialog v-model="showReceiptModal" max-width="600">
+      <VCard>
+        <VCardText class="pa-0 position-relative">
+          <VBtn
+            icon
+            variant="flat"
+            color="secondary"
+            size="small"
+            class="position-absolute top-0 right-0 ma-2"
+            style="z-index: 10"
+            @click="showReceiptModal = false"
+          >
+            <VIcon icon="tabler-x" />
+          </VBtn>
+          <VImg :src="selectedReceiptUrl" cover max-height="80vh" />
+        </VCardText>
+        <VCardActions class="justify-center">
+          <VBtn
+            color="primary"
+            variant="text"
+            :href="selectedReceiptUrl"
+            target="_blank"
+            prepend-icon="tabler-download"
+          >
+            Rasmni yuklab olish
+          </VBtn>
         </VCardActions>
       </VCard>
     </VDialog>

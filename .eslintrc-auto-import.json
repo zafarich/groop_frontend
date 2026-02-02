@@ -365,6 +365,7 @@
     "useToast": true,
     "prettyMoney": true,
     "usePayments": true,
-    "useDashboard": true
+    "useDashboard": true,
+    "useQueryParams": true
   }
 }

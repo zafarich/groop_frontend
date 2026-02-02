@@ -1,6 +1,7 @@
 <script setup>
 import {usePayments} from "@/composables/usePayments";
 import {useToast} from "@/composables/useToast";
+import {useQueryParams} from "@/composables/useQueryParams";
 import {$api} from "@/utils/api";
 import AppDateTimePicker from "@/@core/components/app-form-elements/AppDateTimePicker.vue";
 
@@ -75,7 +76,6 @@ const onDateRangeChange = (val) => {
   const {start, end} = calculateDateRange(val);
   startDate.value = start;
   endDate.value = end;
-  onFilterChange();
 };
 
 // Fetch groups for dropdown
@@ -83,7 +83,8 @@ const fetchGroups = async () => {
   try {
     const res = await $api("/v1/groups?limit=100");
     if (res.success) {
-      groups.value = res.data?.map((g) => ({title: g.name, value: g.id})) || [];
+      groups.value =
+        res.data?.map((g) => ({title: g.name, value: String(g.id)})) || [];
     }
   } catch (e) {
     console.error(e);
@@ -93,6 +94,20 @@ const fetchGroups = async () => {
 // Receipt modal state
 const showReceiptModal = ref(false);
 const selectedReceipt = ref(null);
+const confirmedAmount = ref(null);
+
+// Formatted confirmed amount for input display
+const formattedConfirmedAmount = computed({
+  get: () => {
+    if (!confirmedAmount.value) return "";
+    return new Intl.NumberFormat("uz-UZ").format(confirmedAmount.value);
+  },
+  set: (value) => {
+    // Remove all non-digit characters and convert to number
+    const cleanValue = value.replace(/\D/g, "");
+    confirmedAmount.value = cleanValue ? Number(cleanValue) : null;
+  },
+});
 
 // Rejection modal state
 const showRejectModal = ref(false);
@@ -115,7 +130,7 @@ const tabs = [
 const formatPrice = (price) => {
   if (!price) return "-";
   const num = typeof price === "string" ? parseFloat(price) : price;
-  return new Intl.NumberFormat("uz-UZ").format(num);
+  return new Intl.NumberFormat("uz-UZ").format(num) + " so'm";
 };
 
 // Format date and time
@@ -165,10 +180,13 @@ const formatPhoneNumber = (phone) => {
 
 // Fetch data
 const loadPayments = async () => {
+  // Convert groupFilter to number if it's a string from URL
+  const groupId = groupFilter.value ? Number(groupFilter.value) : undefined;
+
   await fetchPayments({
     status: activeTab.value,
     search: searchQuery.value.trim() || undefined,
-    groupId: groupFilter.value || undefined,
+    groupId: groupId,
     startDate: startDate.value || undefined,
     endDate: endDate.value || undefined,
     page: pagination.value.page,
@@ -176,46 +194,31 @@ const loadPayments = async () => {
   });
 };
 
-// Filter change
-const onFilterChange = () => {
-  pagination.value.page = 1;
-  loadPayments();
-};
-
-// Search handler with debounce
-const searchTimeout = ref(null);
-const onSearch = () => {
-  if (searchTimeout.value) {
-    clearTimeout(searchTimeout.value);
-  }
-  searchTimeout.value = setTimeout(() => {
-    pagination.value.page = 1;
-    loadPayments();
-  }, 500);
-};
-
-// Tab change handler
-const onTabChange = (status) => {
-  activeTab.value = status;
-  pagination.value.page = 1;
-  loadPayments();
-};
-
-// Pagination handlers
-const onPageChange = (page) => {
-  pagination.value.page = page;
-  loadPayments();
-};
-
-const onLimitChange = (limit) => {
-  pagination.value.limit = limit;
-  pagination.value.page = 1;
-  loadPayments();
-};
+// Use Query Params Sync
+useQueryParams({
+  filters: {
+    status: activeTab,
+    search: searchQuery,
+    groupId: groupFilter, // Assuming backend expects groupId, not groupFilter which is ref to value
+    startDate: startDate,
+    endDate: endDate,
+  },
+  pagination: pagination,
+  fetchData: loadPayments,
+  defaultFilters: {
+    status: "PENDING",
+    search: "",
+    groupId: null,
+    startDate: "",
+    endDate: "",
+  },
+  debounceTime: 500,
+});
 
 // Open receipt modal
 const openReceiptModal = (payment) => {
   selectedReceipt.value = payment;
+  confirmedAmount.value = payment.amount;
   showReceiptModal.value = true;
 };
 
@@ -231,7 +234,11 @@ const handleApprove = async () => {
 
   actionLoading.value = true;
   try {
-    const result = await approvePayment(selectedReceipt.value.id);
+    const result = await approvePayment(
+      selectedReceipt.value.id,
+      null,
+      confirmedAmount.value,
+    );
     if (result.success) {
       showSuccess(result.message || "To'lov muvaffaqiyatli tasdiqlandi");
       closeReceiptModal();
@@ -271,7 +278,7 @@ const handleReject = async () => {
   try {
     const result = await rejectPayment(
       selectedReceipt.value.id,
-      rejectReason.value.trim()
+      rejectReason.value.trim(),
     );
     if (result.success) {
       showSuccess(result.message || "To'lov muvaffaqiyatli bekor qilindi");
@@ -311,7 +318,7 @@ const getGroupName = (payment) => {
 
 // Load data on mount
 onMounted(async () => {
-  await Promise.all([fetchGroups(), loadPayments(), fetchStats()]);
+  await Promise.all([fetchGroups(), fetchStats()]);
 });
 </script>
 
@@ -382,11 +389,7 @@ onMounted(async () => {
         <VDivider />
 
         <!-- Tabs -->
-        <VTabs
-          v-model="activeTab"
-          bg-color="transparent"
-          @update:model-value="onTabChange"
-        >
+        <VTabs v-model="activeTab" bg-color="transparent">
           <VTab v-for="tab in tabs" :key="tab.status" :value="tab.status">
             {{ tab.label }}
             <VBadge
@@ -409,7 +412,6 @@ onMounted(async () => {
                 v-model="searchQuery"
                 placeholder="O'quvchi ismi yoki telefon..."
                 density="compact"
-                @input="onSearch"
               >
                 <template #prepend-inner>
                   <VIcon icon="tabler-search" />
@@ -423,7 +425,6 @@ onMounted(async () => {
                 label="Guruh"
                 density="compact"
                 clearable
-                @update:model-value="onFilterChange"
               />
             </VCol>
             <VCol cols="12" md="2">
@@ -441,7 +442,6 @@ onMounted(async () => {
                 v-model="startDate"
                 placeholder="Boshlanish"
                 density="compact"
-                @update:model-value="onFilterChange"
               />
             </VCol>
             <VCol cols="12" md="2">
@@ -449,7 +449,6 @@ onMounted(async () => {
                 v-model="endDate"
                 placeholder="Tugash"
                 density="compact"
-                @update:model-value="onFilterChange"
               />
             </VCol>
           </VRow>
@@ -493,7 +492,7 @@ onMounted(async () => {
               </td>
               <td>{{ getGroupName(payment) }}</td>
               <td class="font-weight-medium">
-                {{ formatPrice(payment.amount) }} so'm
+                {{ formatPrice(payment.amount) }}
               </td>
               <td>{{ formatDateTime(payment.createdAt) }}</td>
               <td>
@@ -530,21 +529,19 @@ onMounted(async () => {
               <div class="d-flex align-center gap-2">
                 <span class="text-body-2">Sahifada:</span>
                 <VSelect
-                  :model-value="pagination.limit"
+                  v-model="pagination.limit"
                   :items="[10, 20, 50, 100]"
                   density="compact"
                   variant="outlined"
                   style="max-width: 100px"
-                  @update:model-value="onLimitChange"
                 />
               </div>
             </VCol>
             <VCol cols="12" md="6" class="d-flex justify-end">
               <VPagination
-                :model-value="pagination.page"
+                v-model="pagination.page"
                 :length="meta.totalPages"
                 :total-visible="5"
-                @update:model-value="onPageChange"
               />
             </VCol>
           </VRow>
@@ -586,7 +583,7 @@ onMounted(async () => {
           <VCol cols="6">
             <div class="text-caption text-medium-emphasis">To'lov summasi</div>
             <div class="font-weight-medium text-primary">
-              {{ formatPrice(selectedReceipt.amount) }} so'm
+              {{ formatPrice(selectedReceipt.amount) }}
             </div>
           </VCol>
           <VCol cols="6">
@@ -602,6 +599,17 @@ onMounted(async () => {
             </div>
           </VCol>
         </VRow>
+
+        <div v-if="selectedReceipt.status === 'PENDING'" class="mb-4">
+          <AppTextField
+            v-model="formattedConfirmedAmount"
+            label="Tasdiqlanadigan summa"
+            type="text"
+            placeholder="Summani kiriting"
+            :hint="`Asl summa: ${formatPrice(selectedReceipt.amount)}`"
+            persistent-hint
+          />
+        </div>
 
         <VDivider class="mb-4" />
 

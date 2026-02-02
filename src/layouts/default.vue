@@ -7,13 +7,17 @@ import {$api} from "@/utils/api";
 import BotSetupModal from "@/components/BotSetupModal.vue";
 
 const DefaultLayoutWithHorizontalNav = defineAsyncComponent(
-  () => import("./components/DefaultLayoutWithHorizontalNav.vue")
+  () => import("./components/DefaultLayoutWithHorizontalNav.vue"),
 );
 const DefaultLayoutWithVerticalNav = defineAsyncComponent(
-  () => import("./components/DefaultLayoutWithVerticalNav.vue")
+  () => import("./components/DefaultLayoutWithVerticalNav.vue"),
 );
 const configStore = useConfigStore();
 const {snackbar} = useToast();
+
+// Auth store for user data
+import {useAuthStore} from "@/stores/auth";
+const authStore = useAuthStore();
 
 // ℹ️ This will switch to vertical nav when define breakpoint is reached when in horizontal nav layout
 
@@ -36,7 +40,7 @@ watch(
     if (!isFallbackStateActive.value && refLoadingIndicator.value)
       refLoadingIndicator.value.resolveHandle();
   },
-  {immediate: true}
+  {immediate: true},
 );
 // !SECTION
 
@@ -68,9 +72,10 @@ const onBotConfigured = () => {
   checkBotConfiguration();
 };
 
-// Check bot configuration on mount
+// Check bot configuration on mount and fetch user data
 onMounted(() => {
   checkBotConfiguration();
+  authStore.fetchUser();
 });
 // !SECTION
 </script>

@@ -78,7 +78,7 @@ export const useAuthStore = defineStore("auth", {
         // API response: { success, code, data: { phoneNumber }, message }
         if (!response.success || !response.data) {
           throw new Error(
-            response.message || "Ro'yxatdan o'tishda xatolik yuz berdi"
+            response.message || "Ro'yxatdan o'tishda xatolik yuz berdi",
           );
         }
 
@@ -116,7 +116,7 @@ export const useAuthStore = defineStore("auth", {
         // API response: { success, code, data: { user, accessToken, refreshToken }, message }
         if (!response.success || !response.data) {
           throw new Error(
-            response.message || "SMS kod tasdiqlashda xatolik yuz berdi"
+            response.message || "SMS kod tasdiqlashda xatolik yuz berdi",
           );
         }
 
@@ -162,7 +162,7 @@ export const useAuthStore = defineStore("auth", {
         // API response: { success, code, data: { user, accessToken, refreshToken }, message }
         if (!response.success || !response.data) {
           throw new Error(
-            response.message || "Ro'yxatdan o'tishda xatolik yuz berdi"
+            response.message || "Ro'yxatdan o'tishda xatolik yuz berdi",
           );
         }
 
@@ -215,9 +215,12 @@ export const useAuthStore = defineStore("auth", {
           method: "POST",
         });
 
-        this.user = response;
-        this.userData = response;
-        useCookie("userData").value = response;
+        // Response is wrapped in { success, code, data, message } format by backend interceptor
+        // The actual user data is in response.data
+        const user = response.data || response;
+        this.user = user;
+        this.userData = user;
+        useCookie("userData").value = user;
       } catch (error) {
         // Token noto'g'ri bo'lsa logout qilish
         if (error.status === 401) this.logout();
@@ -285,7 +288,7 @@ export const useAuthStore = defineStore("auth", {
         // API response: { success, code, data: { message, phoneNumber }, message }
         if (!response.success || !response.data) {
           throw new Error(
-            response.message || "Kod yuborishda xatolik yuz berdi"
+            response.message || "Kod yuborishda xatolik yuz berdi",
           );
         }
 
@@ -319,7 +322,7 @@ export const useAuthStore = defineStore("auth", {
         // API response: { success, code, data: { message, ... }, message }
         if (!response.success || !response.data) {
           throw new Error(
-            response.message || "Kod tasdiqlashda xatolik yuz berdi"
+            response.message || "Kod tasdiqlashda xatolik yuz berdi",
           );
         }
 
@@ -354,7 +357,7 @@ export const useAuthStore = defineStore("auth", {
         // API response: { success, code, data: { message, ... }, message }
         if (!response.success) {
           throw new Error(
-            response.message || "Parolni o'zgartirishda xatolik yuz berdi"
+            response.message || "Parolni o'zgartirishda xatolik yuz berdi",
           );
         }
 

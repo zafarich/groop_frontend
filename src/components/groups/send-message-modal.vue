@@ -32,6 +32,7 @@ const statusOptions = [
   {title: "Barcha o'quvchilar", value: "all"},
   {title: "Lead", value: "LEAD"},
   {title: "Sinov darsidagi", value: "TRIAL"},
+  {title: "Guruhga ulanish kutilmoqda", value: "PENDING_JOIN"},
   {title: "Faol", value: "ACTIVE"},
   {title: "Qarzdorlar", value: "DEBTOR"},
 ];
@@ -59,7 +60,7 @@ const allSelected = computed({
   get() {
     if (students.value.length === 0) return false;
     return students.value.every((s) =>
-      selectedEnrollmentIds.value.includes(s.id)
+      selectedEnrollmentIds.value.includes(s.id),
     );
   },
   set(value) {
@@ -74,7 +75,7 @@ const allSelected = computed({
       // Remove all current page students from selection
       const currentPageIds = students.value.map((s) => s.id);
       selectedEnrollmentIds.value = selectedEnrollmentIds.value.filter(
-        (id) => !currentPageIds.includes(id)
+        (id) => !currentPageIds.includes(id),
       );
     }
   },
@@ -119,7 +120,7 @@ const fetchStudents = async () => {
       `/v1/groups/${props.groupId}/students?${params.toString()}`,
       {
         method: "GET",
-      }
+      },
     );
 
     if (response.success && response.data) {
@@ -248,6 +249,8 @@ const getStudentStatusConfig = (status) => {
       return {color: "info", text: "Lead"};
     case "TRIAL":
       return {color: "warning", text: "Sinov"};
+    case "PENDING_JOIN":
+      return {color: "info", text: "Guruhga ulanish kutilmoqda"};
     case "ACTIVE":
       return {color: "success", text: "Faol"};
     case "FROZEN":
@@ -278,7 +281,7 @@ watch(
       students.value = [];
       studentsSearch.value = "";
     }
-  }
+  },
 );
 </script>
 

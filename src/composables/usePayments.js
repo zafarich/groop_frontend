@@ -110,12 +110,14 @@ export function usePayments() {
    * Approve a payment
    * @param {number} id - Payment ID
    * @param {string} [notes] - Optional notes
+   * @param {number} [amount] - Optional amount to confirm
    * @returns {Object} Result with success status and data/error
    */
-  const approvePayment = async (id, notes = null) => {
+  const approvePayment = async (id, notes = null, amount = null) => {
     try {
       const body = {};
       if (notes) body.notes = notes;
+      if (amount) body.amount = amount;
 
       const response = await $api(`/v1/payments/${id}/approve`, {
         method: "PATCH",

@@ -1,6 +1,7 @@
 <script setup>
 import TelegramSetupModal from "@/components/TelegramSetupModal.vue";
 import {$api} from "@/utils/api";
+import {useQueryParams} from "@/composables/useQueryParams";
 definePage({
   meta: {
     layout: "default",
@@ -105,8 +106,7 @@ const fetchGroups = async () => {
     if (response.success && response.data) {
       groups.value = response.data || [];
       pagination.value = {
-        page: response.meta.page,
-        limit: response.meta.limit,
+        ...pagination.value,
         total: response.meta.total,
         totalPages: response.meta.totalPages,
       };
@@ -118,43 +118,12 @@ const fetchGroups = async () => {
   }
 };
 
-// Search handler with debounce
-const searchTimeout = ref(null);
-const onSearch = () => {
-  if (searchTimeout.value) {
-    clearTimeout(searchTimeout.value);
-  }
-  searchTimeout.value = setTimeout(() => {
-    pagination.value.page = 1;
-    fetchGroups();
-  }, 500);
-};
-
-// Status filter handler
-const onStatusChange = () => {
-  pagination.value.page = 1;
-  fetchGroups();
-};
-
-// Pagination handlers
-const onPageChange = (page) => {
-  pagination.value.page = page;
-  fetchGroups();
-};
-
-const onLimitChange = (limit) => {
-  pagination.value.limit = limit;
-  pagination.value.page = 1;
-  fetchGroups();
-};
-
 // Navigate to create page
 const goToCreate = () => {
   router.push("/groups/create");
 };
 
 // Open telegram setup modal
-
 const openTelegramSetupModal = (token) => {
   connectToken.value = token;
   showTelegramSetupModal.value = true;
@@ -192,9 +161,18 @@ const onDeleteConfirm = async () => {
   }
 };
 
-// Load groups on mount
-onMounted(() => {
-  fetchGroups();
+// Initialize query params sync
+useQueryParams({
+  filters: {
+    search: searchQuery,
+    status: statusFilter,
+  },
+  pagination: pagination,
+  fetchData: fetchGroups,
+  defaultFilters: {
+    search: "",
+    status: "",
+  },
 });
 </script>
 
@@ -225,7 +203,6 @@ onMounted(() => {
               <AppTextField
                 v-model="searchQuery"
                 placeholder="Guruh nomi bo'yicha qidirish..."
-                @input="onSearch"
               >
                 <template #prepend-inner>
                   <VIcon icon="tabler-search" />
@@ -233,11 +210,7 @@ onMounted(() => {
               </AppTextField>
             </VCol>
             <VCol cols="12" md="3">
-              <AppSelect
-                v-model="statusFilter"
-                :items="statusOptions"
-                @update:model-value="onStatusChange"
-              />
+              <AppSelect v-model="statusFilter" :items="statusOptions" />
             </VCol>
           </VRow>
         </VCardText>
@@ -349,21 +322,19 @@ onMounted(() => {
               <div class="d-flex align-center gap-2">
                 <span class="text-body-2">Sahifada:</span>
                 <VSelect
-                  :model-value="pagination.limit"
+                  v-model="pagination.limit"
                   :items="[10, 20, 50, 100]"
                   density="compact"
                   variant="outlined"
                   style="max-width: 100px"
-                  @update:model-value="onLimitChange"
                 />
               </div>
             </VCol>
             <VCol cols="12" md="6" class="d-flex justify-end">
               <VPagination
-                :model-value="pagination.page"
+                v-model="pagination.page"
                 :length="pagination.totalPages"
                 :total-visible="5"
-                @update:model-value="onPageChange"
               />
             </VCol>
           </VRow>

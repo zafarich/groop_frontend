@@ -20,14 +20,20 @@ const form = ref({
   description: "",
   monthlyPrice: null,
   monthlyPriceDisplay: "",
+  wholePeriodPrice: null,
+  wholePeriodPriceDisplay: "",
   courseStartDate: "",
   courseEndDate: "",
   paymentType: "MONTHLY_SAME_DATE",
+  trialPaymentType: "FREE",
+  trialPrice: null,
+  trialPriceDisplay: "",
   lessonsPerPaymentPeriod: null,
   teachers: [{teacherId: null, isPrimary: true}],
   lessonSchedules: [{dayOfWeek: null, startTime: "", endTime: ""}],
   discounts: [],
   studentsCanWrite: true,
+  telegramResourceType: "PRIVATE_GROUP",
 });
 
 const loading = ref(false);
@@ -37,7 +43,8 @@ const loadingTeachers = ref(false);
 
 // Telegram setup modal state
 const showTelegramSetupModal = ref(false);
-const connectToken = ref("");
+const botUsername = ref("");
+const createdTelegramResourceType = ref("PRIVATE_GROUP");
 
 // Payment type options
 const paymentTypes = [
@@ -45,6 +52,19 @@ const paymentTypes = [
   {value: "MONTHLY_SAME_DATE", title: "Har oy bir xil sanada"},
   {value: "ONE_TIME", title: "Butun kurs davri uchun(masalan 2 oy uchun)"},
   {value: "LESSON_BASED", title: "Darslar asosida"},
+];
+
+// Trial payment type options
+const trialPaymentTypes = [
+  {value: "FREE", title: "Bepul sinov darsi"},
+  {value: "PAID", title: "Pullik sinov darsi"},
+  {value: "OFF", title: "Sinov darsi yo'q (Birdan to'lov)"},
+];
+
+// Telegram resource type options
+const telegramResourceTypes = [
+  {value: "PRIVATE_GROUP", title: "Yopiq guruh (Private Group)"},
+  {value: "PRIVATE_CHANNEL", title: "Yopiq kanal (Private Channel)"},
 ];
 
 // Days of week
@@ -98,6 +118,72 @@ const formatMoneyInput = (value) => {
   }
 };
 
+const formatTrialPrice = (value) => {
+  const numericValue = value.replace(/\s/g, "");
+  const number = parseInt(numericValue, 10);
+  if (isNaN(number)) {
+    form.value.trialPrice = null;
+    form.value.trialPriceDisplay = "";
+  } else {
+    form.value.trialPrice = number;
+    form.value.trialPriceDisplay = prettyMoney(number);
+  }
+};
+
+const formatWholePeriodPrice = (value) => {
+  const numericValue = value.replace(/\s/g, "");
+  const number = parseInt(numericValue, 10);
+  if (isNaN(number)) {
+    form.value.wholePeriodPrice = null;
+    form.value.wholePeriodPriceDisplay = "";
+  } else {
+    form.value.wholePeriodPrice = number;
+    form.value.wholePeriodPriceDisplay = prettyMoney(number);
+  }
+};
+
+// Calculate course duration in months
+const courseDurationMonths = computed(() => {
+  if (!form.value.courseStartDate || !form.value.courseEndDate) return 0;
+
+  const parseDate = (dateStr) => {
+    if (/^\d{1,2}\.\d{1,2}\.\d{4}$/.test(dateStr)) {
+      const [day, month, year] = dateStr.split(".");
+      return new Date(year, month - 1, day);
+    }
+    return new Date(dateStr);
+  };
+
+  const start = parseDate(form.value.courseStartDate);
+  const end = parseDate(form.value.courseEndDate);
+
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) return 0;
+
+  const diffTime = end.getTime() - start.getTime();
+  const diffDays = diffTime / (1000 * 60 * 60 * 24);
+  const months = diffDays / 30;
+
+  return Math.round(months * 10) / 10; // Round to 1 decimal
+});
+
+// Calculate total if paying monthly
+const totalMonthlyPayment = computed(() => {
+  if (!form.value.monthlyPrice || !courseDurationMonths.value) return 0;
+  return Math.ceil(courseDurationMonths.value) * form.value.monthlyPrice;
+});
+
+// Calculate savings for whole period payment
+const wholePeriodSavings = computed(() => {
+  if (!form.value.wholePeriodPrice || !totalMonthlyPayment.value) return 0;
+  return totalMonthlyPayment.value - form.value.wholePeriodPrice;
+});
+
+// Calculate savings percentage
+const wholePeriodSavingsPercent = computed(() => {
+  if (!wholePeriodSavings.value || !totalMonthlyPayment.value) return 0;
+  return Math.round((wholePeriodSavings.value / totalMonthlyPayment.value) * 100);
+});
+
 const formatDiscountAmount = (index, value) => {
   const numericValue = value.replace(/\s/g, "");
   const number = parseInt(numericValue, 10);
@@ -108,6 +194,21 @@ const formatDiscountAmount = (index, value) => {
     form.value.discounts[index].discountAmount = number;
     form.value.discounts[index].discountAmountDisplay = prettyMoney(number);
   }
+};
+
+const getDiscountExample = (discount) => {
+  if (!form.value.monthlyPrice || !discount.months || !discount.discountAmount) return null;
+  
+  const totalOriginal = form.value.monthlyPrice * discount.months;
+  const totalWithDiscount = totalOriginal - discount.discountAmount;
+  
+  return {
+    monthlyPrice: prettyMoney(form.value.monthlyPrice),
+    months: discount.months,
+    totalOriginal: prettyMoney(totalOriginal),
+    discountAmount: prettyMoney(discount.discountAmount),
+    totalWithDiscount: prettyMoney(totalWithDiscount)
+  };
 };
 
 // Convert date to ISO 8601 format (YYYY-MM-DD)
@@ -223,6 +324,7 @@ const removeDiscount = (index) => {
 // Validation
 const validateForm = () => {
   errorMessage.value = "";
+  const isChannel = form.value.telegramResourceType === 'PRIVATE_CHANNEL';
 
   // Basic validation
   if (!form.value.name) {
@@ -235,12 +337,12 @@ const validateForm = () => {
     return false;
   }
 
-  if (!form.value.courseStartDate) {
+  if (!isChannel && !form.value.courseStartDate) {
     errorMessage.value = "Kurs boshlanish sanasini kiriting";
     return false;
   }
 
-  if (!form.value.courseEndDate) {
+  if (!isChannel && !form.value.courseEndDate) {
     errorMessage.value = "Kurs tugash sanasini kiriting";
     return false;
   }
@@ -250,8 +352,19 @@ const validateForm = () => {
     return false;
   }
 
+  // Validate trial price
+  if (
+    !isChannel &&
+    form.value.trialPaymentType === "PAID" &&
+    (form.value.trialPrice === null || form.value.trialPrice < 0)
+  ) {
+    errorMessage.value = "Sinov darsi narxini kiriting";
+    return false;
+  }
+
   // Validate lessons per payment period for LESSON_BASED
   if (
+    !isChannel &&
     form.value.paymentType === "LESSON_BASED" &&
     (!form.value.lessonsPerPaymentPeriod ||
       form.value.lessonsPerPaymentPeriod < 1)
@@ -261,67 +374,69 @@ const validateForm = () => {
   }
 
   // Validate teachers
-  if (form.value.teachers.length === 0) {
-    errorMessage.value = "Kamida bitta o'qituvchi qo'shing";
-    return false;
-  }
-
-  const hasEmptyTeacher = form.value.teachers.some((t) => !t.teacherId);
-  if (hasEmptyTeacher) {
-    errorMessage.value = "Barcha o'qituvchilarni tanlang";
-    return false;
-  }
-
-  const primaryTeachers = form.value.teachers.filter((t) => t.isPrimary);
-  if (primaryTeachers.length !== 1) {
-    errorMessage.value = "Faqat bitta asosiy o'qituvchi bo'lishi kerak";
-    return false;
-  }
-
-  // Validate lesson schedules
-  if (form.value.lessonSchedules.length === 0) {
-    errorMessage.value = "Kamida bitta dars jadvalini qo'shing";
-    return false;
-  }
-
-  const hasEmptySchedule = form.value.lessonSchedules.some(
-    (s) => !s.dayOfWeek || !s.startTime || !s.endTime
-  );
-  if (hasEmptySchedule) {
-    errorMessage.value = "Barcha dars jadvallarini to'ldiring";
-    return false;
-  }
-
-  // Check for duplicate days
-  const days = form.value.lessonSchedules.map((s) => s.dayOfWeek);
-  const uniqueDays = new Set(days);
-  if (days.length !== uniqueDays.size) {
-    errorMessage.value = "Bir xil kunlar takrorlanmasligi kerak";
-    return false;
-  }
-
-  // Validate time format and logic
-  for (const schedule of form.value.lessonSchedules) {
-    const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
-    if (
-      !timeRegex.test(schedule.startTime) ||
-      !timeRegex.test(schedule.endTime)
-    ) {
-      errorMessage.value = "Vaqtni HH:MM formatida kiriting (masalan: 09:00)";
+  if (!isChannel) {
+    if (form.value.teachers.length === 0) {
+      errorMessage.value = "Kamida bitta o'qituvchi qo'shing";
       return false;
     }
 
-    if (schedule.startTime >= schedule.endTime) {
-      errorMessage.value =
-        "Tugash vaqti boshlanish vaqtidan kechroq bo'lishi kerak";
+    const hasEmptyTeacher = form.value.teachers.some((t) => !t.teacherId);
+    if (hasEmptyTeacher) {
+      errorMessage.value = "Barcha o'qituvchilarni tanlang";
       return false;
+    }
+
+    const primaryTeachers = form.value.teachers.filter((t) => t.isPrimary);
+    if (primaryTeachers.length !== 1) {
+      errorMessage.value = "Faqat bitta asosiy o'qituvchi bo'lishi kerak";
+      return false;
+    }
+
+    // Validate lesson schedules
+    if (form.value.lessonSchedules.length === 0) {
+      errorMessage.value = "Kamida bitta dars jadvalini qo'shing";
+      return false;
+    }
+
+    const hasEmptySchedule = form.value.lessonSchedules.some(
+      (s) => !s.dayOfWeek || !s.startTime || !s.endTime,
+    );
+    if (hasEmptySchedule) {
+      errorMessage.value = "Barcha dars jadvallarini to'ldiring";
+      return false;
+    }
+
+    // Check for duplicate days
+    const days = form.value.lessonSchedules.map((s) => s.dayOfWeek);
+    const uniqueDays = new Set(days);
+    if (days.length !== uniqueDays.size) {
+      errorMessage.value = "Bir xil kunlar takrorlanmasligi kerak";
+      return false;
+    }
+
+    // Validate time format and logic
+    for (const schedule of form.value.lessonSchedules) {
+      const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+      if (
+        !timeRegex.test(schedule.startTime) ||
+        !timeRegex.test(schedule.endTime)
+      ) {
+        errorMessage.value = "Vaqtni HH:MM formatida kiriting (masalan: 09:00)";
+        return false;
+      }
+
+      if (schedule.startTime >= schedule.endTime) {
+        errorMessage.value =
+          "Tugash vaqti boshlanish vaqtidan kechroq bo'lishi kerak";
+        return false;
+      }
     }
   }
 
   // Validate discounts
-  if (form.value.discounts.length > 0) {
+  if (!isChannel && form.value.discounts.length > 0) {
     const hasEmptyDiscount = form.value.discounts.some(
-      (d) => d.months === null || d.months < 2 || d.discountAmount === null
+      (d) => d.months === null || d.months < 2 || d.discountAmount === null,
     );
     if (hasEmptyDiscount) {
       errorMessage.value = "Chegirmalar kamida 2 oydan boshlanishi kerak";
@@ -342,13 +457,28 @@ const validateForm = () => {
 };
 
 // Submit function
-const onSubmit = async () => {
-  // if (!validateForm()) {
-  //   return;
-  // }
+// Watcher for resource type
+watch(
+  () => form.value.telegramResourceType,
+  (newType) => {
+    if (newType === 'PRIVATE_CHANNEL') {
+      form.value.paymentType = 'MONTHLY_SAME_DATE';
+      form.value.studentsCanWrite = false;
+      // Optional: Clear other fields if desired, but hiding them is usually enough
+    } else {
+      form.value.studentsCanWrite = true;
+    }
+  }
+);
 
-  // loading.value = true;
-  // errorMessage.value = "";
+// Submit function
+const onSubmit = async () => {
+  if (!validateForm()) {
+    return;
+  }
+
+  loading.value = true;
+  errorMessage.value = "";
 
   try {
     // Debug: Log original dates
@@ -371,9 +501,15 @@ const onSubmit = async () => {
       name: form.value.name,
       description: form.value.description || undefined,
       monthlyPrice: form.value.monthlyPrice,
+      wholePeriodPrice: form.value.wholePeriodPrice || undefined,
       courseStartDate: startDateISO,
       courseEndDate: endDateISO,
       paymentType: form.value.paymentType,
+      trialPaymentType: form.value.trialPaymentType,
+      trialPrice:
+        form.value.trialPaymentType === "PAID"
+          ? form.value.trialPrice
+          : undefined,
       lessonsPerPaymentPeriod:
         form.value.paymentType === "LESSON_BASED"
           ? form.value.lessonsPerPaymentPeriod
@@ -395,6 +531,7 @@ const onSubmit = async () => {
             }))
           : undefined,
       studentsCanWrite: form.value.studentsCanWrite,
+      telegramResourceType: form.value.telegramResourceType,
     };
 
     const response = await $api("/v1/groups", {
@@ -405,19 +542,12 @@ const onSubmit = async () => {
     if (response.success) {
       showSuccess("Guruh muvaffaqiyatli yaratildi!");
 
-      // Show Telegram setup modal instead of redirecting
-      if (
-        response.setupInstructions?.connectToken ||
-        response.data?.connectToken
-      ) {
-        connectToken.value =
-          response.setupInstructions?.connectToken ||
-          response.data?.connectToken;
-        showTelegramSetupModal.value = true;
-      } else {
-        // Fallback: redirect if no connect token (shouldn't happen)
-        router.push("/groups");
-      }
+      // Show Telegram setup modal with bot info
+      botUsername.value = response.setupInstructions?.botUsername || "";
+      createdTelegramResourceType.value =
+        response.setupInstructions?.telegramResourceType ||
+        form.value.telegramResourceType;
+      showTelegramSetupModal.value = true;
     } else {
       errorMessage.value = response.message || "Xatolik yuz berdi";
     }
@@ -500,6 +630,33 @@ onMounted(() => {
                 />
               </VCol>
 
+              <!-- Telegram Resource Type -->
+              <VCol cols="12" md="6">
+                <AppSelect
+                  v-model="form.telegramResourceType"
+                  :items="telegramResourceTypes"
+                  label="Telegram turi *"
+                  :rules="[rules.required]"
+                />
+                <VAlert
+                  type="info"
+                  variant="tonal"
+                  density="compact"
+                  class="mt-2"
+                >
+                  <template
+                    v-if="form.telegramResourceType === 'PRIVATE_GROUP'"
+                  >
+                    <strong>Yopiq guruh:</strong> O'quvchilar xabar yozishi
+                    mumkin
+                  </template>
+                  <template v-else>
+                    <strong>Yopiq kanal:</strong> Faqat adminlar post qiladi,
+                    o'quvchilar faqat o'qiydi
+                  </template>
+                </VAlert>
+              </VCol>
+
               <!-- Description -->
               <VCol cols="12" md="6">
                 <AppTextarea
@@ -508,30 +665,32 @@ onMounted(() => {
                   placeholder="Guruh haqida qisqacha ma'lumot..."
                   rows="3"
                 />
-                <VSwitch
-                  v-model="form.studentsCanWrite"
-                  label="Studentlar guruhga yoza oladimi?"
-                  color="primary"
-                  class="mt-2"
-                />
-                <VAlert
-                  type="info"
-                  variant="tonal"
-                  density="compact"
-                  class="mt-2"
-                >
-                  Buni yoqib qo'ysangiz o'quvchi qarzdor bo'lsa telegram guruhga
-                  yoza olmaydi
-                </VAlert>
+                <div v-if="form.telegramResourceType !== 'PRIVATE_CHANNEL'">
+                  <VSwitch
+                    v-model="form.studentsCanWrite"
+                    label="Studentlar guruhga yoza oladimi?"
+                    color="primary"
+                    class="mt-2"
+                  />
+                  <VAlert
+                    type="info"
+                    variant="tonal"
+                    density="compact"
+                    class="mt-2"
+                  >
+                    Buni yoqib qo'ysangiz o'quvchi qarzdor bo'lsa telegram guruhga
+                    yoza olmaydi
+                  </VAlert>
+                </div>
               </VCol>
 
               <!-- Course Dates Section -->
-              <VCol cols="12">
+              <VCol cols="12" v-if="form.telegramResourceType !== 'PRIVATE_CHANNEL'">
                 <h2 class="text-h5 mt-3">Kurs muddati</h2>
               </VCol>
 
               <!-- Course Start Date -->
-              <VCol cols="12" md="6">
+              <VCol cols="12" md="6" v-if="form.telegramResourceType !== 'PRIVATE_CHANNEL'">
                 <AppDateTimePicker
                   v-model="form.courseStartDate"
                   placeholder="Boshlash sanasini tanlang"
@@ -546,7 +705,7 @@ onMounted(() => {
               </VCol>
 
               <!-- Course End Date -->
-              <VCol cols="12" md="6">
+              <VCol cols="12" md="6" v-if="form.telegramResourceType !== 'PRIVATE_CHANNEL'">
                 <AppDateTimePicker
                   v-model="form.courseEndDate"
                   placeholder="Tugash sanasini tanlang"
@@ -566,7 +725,7 @@ onMounted(() => {
               </VCol>
 
               <!-- Payment Type -->
-              <VCol cols="12" md="6">
+              <VCol cols="12" md="6" v-if="form.telegramResourceType !== 'PRIVATE_CHANNEL'">
                 <AppSelect
                   v-model="form.paymentType"
                   :items="paymentTypes"
@@ -583,6 +742,27 @@ onMounted(() => {
                   label="To'lov davridagi darslar soni *"
                   placeholder="12"
                   :rules="[rules.requiredNumber, rules.positiveNumber]"
+                />
+              </VCol>
+
+              <!-- Trial Payment Type -->
+              <VCol cols="12" md="6" v-if="form.telegramResourceType !== 'PRIVATE_CHANNEL'">
+                <AppSelect
+                  v-model="form.trialPaymentType"
+                  :items="trialPaymentTypes"
+                  label="Sinov darsi turi *"
+                  :rules="[rules.required]"
+                />
+              </VCol>
+
+              <!-- Trial Price (if PAID) -->
+              <VCol v-if="form.trialPaymentType === 'PAID' && form.telegramResourceType !== 'PRIVATE_CHANNEL'" cols="12" md="6">
+                <AppTextField
+                  v-model="form.trialPriceDisplay"
+                  label="Sinov darsi narxi *"
+                  placeholder="50 000"
+                  :rules="[rules.required]"
+                  @input="formatTrialPrice($event.target.value)"
                 />
               </VCol>
 
@@ -614,7 +794,7 @@ onMounted(() => {
               </VCol>
 
               <!-- Teachers Section -->
-              <VCol cols="12">
+              <VCol cols="12" v-if="form.telegramResourceType !== 'PRIVATE_CHANNEL'">
                 <div class="d-flex align-center justify-space-between mt-4">
                   <h3 class="text-h5">O'qituvchilar</h3>
                   <VBtn
@@ -631,6 +811,7 @@ onMounted(() => {
               <VCol
                 v-for="(teacher, index) in form.teachers"
                 :key="index"
+                v-if="form.telegramResourceType !== 'PRIVATE_CHANNEL'"
                 cols="12"
               >
                 <VCard variant="outlined" class="pa-4">
@@ -668,7 +849,7 @@ onMounted(() => {
               </VCol>
 
               <!-- Lesson Schedules Section -->
-              <VCol cols="12">
+              <VCol cols="12" v-if="form.telegramResourceType !== 'PRIVATE_CHANNEL'">
                 <div class="d-flex align-center justify-space-between mt-4">
                   <h3 class="text-h5">Dars jadvali</h3>
                   <VBtn
@@ -684,6 +865,7 @@ onMounted(() => {
 
               <VCol
                 v-for="(schedule, index) in form.lessonSchedules"
+                v-if="form.telegramResourceType !== 'PRIVATE_CHANNEL'"
                 :key="index"
                 cols="12"
               >
@@ -731,10 +913,67 @@ onMounted(() => {
                 </VCard>
               </VCol>
 
-              <!-- Discounts Section -->
-              <VCol cols="12">
+              <!-- Pricing Options Section -->
+              <VCol v-if="form.telegramResourceType !== 'PRIVATE_CHANNEL'" cols="12">
+                <h3 class="text-h5 mt-4">Narxlar va chegirmalar</h3>
+                <p class="text-body-2 text-medium-emphasis mt-1">
+                  O'quvchilar uchun to'lov variantlari. Barcha narxlar o'quvchilarga ko'rsatiladi.
+                </p>
+              </VCol>
+
+              <!-- Whole Period Price -->
+              <VCol cols="12" md="6" v-if="form.telegramResourceType !== 'PRIVATE_CHANNEL'">
+                <AppTextField
+                  v-model="form.wholePeriodPriceDisplay"
+                  label="Butun davr uchun narx (ixtiyoriy)"
+                  placeholder="1 500 000"
+                  @input="formatWholePeriodPrice($event.target.value)"
+                >
+                  <template #append-inner>
+                    <span class="text-body-2 text-medium-emphasis">so'm</span>
+                  </template>
+                </AppTextField>
+              </VCol>
+
+              <!-- Pricing Summary -->
+              <VCol cols="12" v-if="courseDurationMonths > 0 && form.monthlyPrice">
+                <VCard variant="tonal" color="info" class="pa-4">
+                  <div class="text-subtitle-1 font-weight-bold mb-3">
+                    Narxlar taqqoslash ({{ courseDurationMonths }} oy uchun)
+                  </div>
+                  <VRow>
+                    <VCol cols="12" md="4">
+                      <div class="text-caption text-medium-emphasis">Oyma-oy to'lash</div>
+                      <div class="text-body-1 font-weight-medium">
+                        {{ prettyMoney(totalMonthlyPayment) }} so'm
+                      </div>
+                      <div class="text-caption">
+                        ({{ prettyMoney(form.monthlyPrice) }} × {{ Math.ceil(courseDurationMonths) }} oy)
+                      </div>
+                    </VCol>
+                    <VCol cols="12" md="4" v-if="form.wholePeriodPrice">
+                      <div class="text-caption text-medium-emphasis">Butun davr uchun</div>
+                      <div class="text-body-1 font-weight-medium text-success">
+                        {{ prettyMoney(form.wholePeriodPrice) }} so'm
+                      </div>
+                      <div class="text-caption text-success" v-if="wholePeriodSavings > 0">
+                        {{ wholePeriodSavingsPercent }}% tejash
+                      </div>
+                    </VCol>
+                    <VCol cols="12" md="4" v-if="wholePeriodSavings > 0">
+                      <div class="text-caption text-medium-emphasis">Tejash</div>
+                      <div class="text-body-1 font-weight-medium text-success">
+                        {{ prettyMoney(wholePeriodSavings) }} so'm
+                      </div>
+                    </VCol>
+                  </VRow>
+                </VCard>
+              </VCol>
+
+              <!-- Multi-month Discounts -->
+              <VCol cols="12" v-if="form.telegramResourceType !== 'PRIVATE_CHANNEL'">
                 <div class="d-flex align-center mt-4">
-                  <h3 class="text-h5 mr-4">Chegirmalar (ixtiyoriy)</h3>
+                  <h4 class="text-h6 mr-4">Bir necha oylik chegirmalar</h4>
                   <VBtn
                     size="small"
                     color="primary"
@@ -746,21 +985,19 @@ onMounted(() => {
                 </div>
               </VCol>
 
-              <VCol cols="12" v-if="form.discounts.length > 0">
+              <VCol cols="12" v-if="form.discounts.length > 0 && form.telegramResourceType !== 'PRIVATE_CHANNEL'">
                 <VAlert
                   type="info"
                   variant="tonal"
                   density="compact"
                   class="mb-0"
                 >
-                  1 oydan ko'p muddatga to'laganda chegirma bo'ladigan holatdagi
-                  chegirma turi. Nechta oy uchun to'lasa umumiy qancha chegirma
-                  bo'lishini kiriting
+                  Bir necha oyga oldindan to'laganda chegirma. Masalan: 3 oyga to'lasa 100,000 so'm chegirma.
                 </VAlert>
               </VCol>
 
               <VCol
-                v-if="form.discounts.length > 0"
+                v-if="form.discounts.length > 0 && form.telegramResourceType !== 'PRIVATE_CHANNEL'"
                 v-for="(discount, index) in form.discounts"
                 :key="index"
                 cols="12"
@@ -797,6 +1034,19 @@ onMounted(() => {
                         @click="removeDiscount(index)"
                       />
                     </VCol>
+                    <VCol cols="12" v-if="getDiscountExample(discount)">
+                      <VAlert
+                        type="success"
+                        variant="tonal"
+                        density="compact"
+                        class="mt-2 text-body-2"
+                      >
+                         <strong>{{ discount.months }} oy uchun:</strong> 
+                         {{ getDiscountExample(discount).monthlyPrice }} x {{ discount.months }} = 
+                         {{ getDiscountExample(discount).totalOriginal }} - {{ getDiscountExample(discount).discountAmount }} (chegirma) = 
+                         <strong>{{ getDiscountExample(discount).totalWithDiscount }} so'm</strong>
+                      </VAlert>
+                    </VCol>
                   </VRow>
                 </VCard>
               </VCol>
@@ -826,7 +1076,8 @@ onMounted(() => {
   <!-- Telegram Setup Modal -->
   <TelegramSetupModal
     v-model="showTelegramSetupModal"
-    :connect-token="connectToken"
+    :bot-username="botUsername"
+    :telegram-resource-type="createdTelegramResourceType"
     @close="handleSetupModalClose"
   />
 </template>

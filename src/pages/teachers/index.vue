@@ -1,4 +1,5 @@
 <script setup>
+import {useQueryParams} from "@/composables/useQueryParams";
 import {$api} from "@/utils/api";
 import {prettyPhoneNumber} from "@/utils/utils";
 definePage({
@@ -45,8 +46,7 @@ const fetchTeachers = async () => {
     if (response.success && response.data) {
       teachers.value = response.data.data || [];
       pagination.value = {
-        page: response.data.meta.page,
-        limit: response.data.meta.limit,
+        ...pagination.value,
         total: response.data.meta.total,
         totalPages: response.data.meta.totalPages,
       };
@@ -58,29 +58,18 @@ const fetchTeachers = async () => {
   }
 };
 
-// Search handler with debounce
-const searchTimeout = ref(null);
-const onSearch = () => {
-  if (searchTimeout.value) {
-    clearTimeout(searchTimeout.value);
-  }
-  searchTimeout.value = setTimeout(() => {
-    pagination.value.page = 1; // Reset to first page on search
-    fetchTeachers();
-  }, 500);
-};
-
-// Pagination handlers
-const onPageChange = (page) => {
-  pagination.value.page = page;
-  fetchTeachers();
-};
-
-const onLimitChange = (limit) => {
-  pagination.value.limit = limit;
-  pagination.value.page = 1;
-  fetchTeachers();
-};
+// Use Query Params Sync
+useQueryParams({
+  filters: {
+    search: searchQuery,
+  },
+  pagination: pagination,
+  fetchData: fetchTeachers,
+  defaultFilters: {
+    search: "",
+  },
+  debounceTime: 500,
+});
 
 // Navigate to create page
 const goToCreate = () => {
@@ -115,11 +104,6 @@ const onDeleteConfirm = async () => {
   }
 };
 
-// Load teachers on mount
-onMounted(() => {
-  fetchTeachers();
-});
-
 function clickTableItem(item) {
   router.push({name: "teachers-edit", params: {id: item.id}});
 }
@@ -152,7 +136,6 @@ function clickTableItem(item) {
               <AppTextField
                 v-model="searchQuery"
                 placeholder="Ism, telefon yoki Telegram ID bo'yicha qidirish..."
-                @input="onSearch"
               >
                 <template #prepend-inner>
                   <VIcon icon="tabler-search" />
@@ -166,12 +149,8 @@ function clickTableItem(item) {
         <VTable>
           <thead>
             <tr>
-              <th>ID</th>
-              <th>Ism</th>
-              <th>Familiya</th>
-              <th>Telefon</th>
-              <th>Telegram ID</th>
-              <th>Telegram Username</th>
+              <th>O'qituvchi</th>
+              <th>Telegram</th>
               <th>Mutaxassislik</th>
               <th>Status</th>
               <th>Amallar</th>
@@ -179,12 +158,12 @@ function clickTableItem(item) {
           </thead>
           <tbody>
             <tr v-if="loading">
-              <td colspan="9" class="text-center py-8">
+              <td colspan="5" class="text-center py-8">
                 <VProgressCircular indeterminate color="primary" />
               </td>
             </tr>
             <tr v-else-if="teachers.length === 0">
-              <td colspan="9" class="text-center py-8">
+              <td colspan="5" class="text-center py-8">
                 <div class="text-body-1 text-medium-emphasis">
                   O'qituvchilar topilmadi
                 </div>
@@ -196,16 +175,27 @@ function clickTableItem(item) {
               v-for="teacher in teachers"
               :key="teacher.id"
             >
-              <td>{{ teacher.id }}</td>
-              <td>{{ teacher.user?.firstName || "-" }}</td>
-              <td>{{ teacher.user?.lastName || "-" }}</td>
-              <td>{{ prettyPhoneNumber(teacher.user?.phoneNumber) || "-" }}</td>
-              <td>{{ teacher.user?.telegramUser?.telegramId || "-" }}</td>
               <td>
-                <span v-if="teacher.user?.telegramUser?.username">
-                  @{{ teacher.user.telegramUser.username }}
-                </span>
-                <span v-else>-</span>
+                <div class="d-flex flex-column">
+                  <span class="font-weight-medium">
+                    {{ teacher.user?.firstName || "-" }}
+                    {{ teacher.user?.lastName || "" }}
+                  </span>
+                  <span class="text-caption text-medium-emphasis">
+                    {{ prettyPhoneNumber(teacher.user?.phoneNumber) || "-" }}
+                  </span>
+                </div>
+              </td>
+              <td>
+                <div class="d-flex flex-column">
+                  <span v-if="teacher.user?.telegramUser?.username" class="text-primary">
+                    @{{ teacher.user.telegramUser.username }}
+                  </span>
+                  <span v-else class="text-disabled">-</span>
+                  <span v-if="teacher.user?.telegramUser?.telegramId" class="text-caption text-medium-emphasis">
+                    ID: {{ teacher.user.telegramUser.telegramId }}
+                  </span>
+                </div>
               </td>
               <td>{{ teacher.specialty || "-" }}</td>
               <td>
@@ -218,20 +208,32 @@ function clickTableItem(item) {
                 </VChip>
               </td>
               <td>
-                <VBtn
-                  size="small"
-                  color="primary"
-                  variant="text"
-                  icon="tabler-edit"
-                  @click="router.push(`/teachers/edit/${teacher.id}`)"
-                />
-                <VBtn
-                  size="small"
-                  color="error"
-                  variant="text"
-                  icon="tabler-trash"
-                  @click="onDeleteClick(teacher)"
-                />
+                <div class="d-flex align-center gap-2">
+                  <VBtn
+                    size="small"
+                    color="primary"
+                    variant="text"
+                    icon="tabler-edit"
+                    @click.stop="router.push(`/teachers/edit/${teacher.id}`)"
+                  >
+                    <VIcon icon="tabler-edit" />
+                    <VTooltip activator="parent" location="top"
+                      >Tahrirlash</VTooltip
+                    >
+                  </VBtn>
+                  <VBtn
+                    size="small"
+                    color="error"
+                    variant="text"
+                    icon="tabler-trash"
+                    @click.stop="onDeleteClick(teacher)"
+                  >
+                    <VIcon icon="tabler-trash" />
+                    <VTooltip activator="parent" location="top"
+                      >O'chirish</VTooltip
+                    >
+                  </VBtn>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -244,21 +246,19 @@ function clickTableItem(item) {
               <div class="d-flex align-center gap-2">
                 <span class="text-body-2">Sahifada:</span>
                 <VSelect
-                  :model-value="pagination.limit"
+                  v-model="pagination.limit"
                   :items="[10, 20, 50, 100]"
                   density="compact"
                   variant="outlined"
                   style="max-width: 100px"
-                  @update:model-value="onLimitChange"
                 />
               </div>
             </VCol>
             <VCol cols="12" md="6" class="d-flex justify-end">
               <VPagination
-                :model-value="pagination.page"
+                v-model="pagination.page"
                 :length="pagination.totalPages"
                 :total-visible="5"
-                @update:model-value="onPageChange"
               />
             </VCol>
           </VRow>

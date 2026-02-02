@@ -22,6 +22,8 @@ const form = ref({
   description: "",
   monthlyPrice: null,
   monthlyPriceDisplay: "",
+  wholePeriodPrice: null,
+  wholePeriodPriceDisplay: "",
   courseStartDate: "",
   courseEndDate: "",
   paymentType: "MONTHLY_SAME_DATE",
@@ -113,6 +115,60 @@ const formatMoneyInput = (value) => {
   }
 };
 
+const formatWholePeriodPrice = (value) => {
+  const numericValue = value.replace(/\s/g, "");
+  const number = parseInt(numericValue, 10);
+  if (isNaN(number)) {
+    form.value.wholePeriodPrice = null;
+    form.value.wholePeriodPriceDisplay = "";
+  } else {
+    form.value.wholePeriodPrice = number;
+    form.value.wholePeriodPriceDisplay = prettyMoney(number);
+  }
+};
+
+// Calculate course duration in months
+const courseDurationMonths = computed(() => {
+  if (!form.value.courseStartDate || !form.value.courseEndDate) return 0;
+
+  const parseDate = (dateStr) => {
+    if (/^\d{1,2}\.\d{1,2}\.\d{4}$/.test(dateStr)) {
+      const [day, month, year] = dateStr.split(".");
+      return new Date(year, month - 1, day);
+    }
+    return new Date(dateStr);
+  };
+
+  const start = parseDate(form.value.courseStartDate);
+  const end = parseDate(form.value.courseEndDate);
+
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) return 0;
+
+  const diffTime = end.getTime() - start.getTime();
+  const diffDays = diffTime / (1000 * 60 * 60 * 24);
+  const months = diffDays / 30;
+
+  return Math.round(months * 10) / 10;
+});
+
+// Calculate total if paying monthly
+const totalMonthlyPayment = computed(() => {
+  if (!form.value.monthlyPrice || !courseDurationMonths.value) return 0;
+  return Math.ceil(courseDurationMonths.value) * form.value.monthlyPrice;
+});
+
+// Calculate savings for whole period payment
+const wholePeriodSavings = computed(() => {
+  if (!form.value.wholePeriodPrice || !totalMonthlyPayment.value) return 0;
+  return totalMonthlyPayment.value - form.value.wholePeriodPrice;
+});
+
+// Calculate savings percentage
+const wholePeriodSavingsPercent = computed(() => {
+  if (!wholePeriodSavings.value || !totalMonthlyPayment.value) return 0;
+  return Math.round((wholePeriodSavings.value / totalMonthlyPayment.value) * 100);
+});
+
 const formatDiscountAmount = (index, value) => {
   const numericValue = value.replace(/\s/g, "");
   const number = parseInt(numericValue, 10);
@@ -123,6 +179,21 @@ const formatDiscountAmount = (index, value) => {
     discountsForm.value[index].discountAmount = number;
     discountsForm.value[index].discountAmountDisplay = prettyMoney(number);
   }
+};
+
+const getDiscountExample = (discount) => {
+  if (!form.value.monthlyPrice || !discount.months || !discount.discountAmount) return null;
+  
+  const totalOriginal = form.value.monthlyPrice * discount.months;
+  const totalWithDiscount = totalOriginal - discount.discountAmount;
+  
+  return {
+    monthlyPrice: prettyMoney(form.value.monthlyPrice),
+    months: discount.months,
+    totalOriginal: prettyMoney(totalOriginal),
+    discountAmount: prettyMoney(discount.discountAmount),
+    totalWithDiscount: prettyMoney(totalWithDiscount)
+  };
 };
 
 // Convert date to ISO 8601 format
@@ -188,6 +259,8 @@ const fetchGroupDetails = async () => {
         description: group.description || "",
         monthlyPrice: Number(group.monthlyPrice),
         monthlyPriceDisplay: prettyMoney(Number(group.monthlyPrice)),
+        wholePeriodPrice: group.wholePeriodPrice ? Number(group.wholePeriodPrice) : null,
+        wholePeriodPriceDisplay: group.wholePeriodPrice ? prettyMoney(Number(group.wholePeriodPrice)) : "",
         courseStartDate: formatDateForDisplay(group.courseStartDate),
         courseEndDate: formatDateForDisplay(group.courseEndDate),
         paymentType: group.paymentType,
@@ -437,6 +510,7 @@ const onSubmit = async () => {
       name: form.value.name,
       description: form.value.description || undefined,
       monthlyPrice: form.value.monthlyPrice,
+      wholePeriodPrice: form.value.wholePeriodPrice || undefined,
       courseStartDate: startDateISO,
       courseEndDate: endDateISO,
       paymentType: form.value.paymentType,
@@ -562,6 +636,55 @@ onMounted(() => {
                     :rules="[rules.required]"
                     @input="formatMoneyInput($event.target.value)"
                   />
+                </VCol>
+
+                <!-- Whole Period Price -->
+                <VCol cols="12" md="6">
+                  <AppTextField
+                    v-model="form.wholePeriodPriceDisplay"
+                    label="Butun davr uchun narx (ixtiyoriy)"
+                    placeholder="1 500 000"
+                    @input="formatWholePeriodPrice($event.target.value)"
+                  >
+                    <template #append-inner>
+                      <span class="text-body-2 text-medium-emphasis">so'm</span>
+                    </template>
+                  </AppTextField>
+                </VCol>
+
+                <!-- Pricing Summary -->
+                <VCol cols="12" v-if="courseDurationMonths > 0 && form.monthlyPrice">
+                  <VCard variant="tonal" color="info" class="pa-4">
+                    <div class="text-subtitle-1 font-weight-bold mb-3">
+                      Narxlar taqqoslash ({{ courseDurationMonths }} oy uchun)
+                    </div>
+                    <VRow>
+                      <VCol cols="12" md="4">
+                        <div class="text-caption text-medium-emphasis">Oyma-oy to'lash</div>
+                        <div class="text-body-1 font-weight-medium">
+                          {{ prettyMoney(totalMonthlyPayment) }} so'm
+                        </div>
+                        <div class="text-caption">
+                          ({{ prettyMoney(form.monthlyPrice) }} × {{ Math.ceil(courseDurationMonths) }} oy)
+                        </div>
+                      </VCol>
+                      <VCol cols="12" md="4" v-if="form.wholePeriodPrice">
+                        <div class="text-caption text-medium-emphasis">Butun davr uchun</div>
+                        <div class="text-body-1 font-weight-medium text-success">
+                          {{ prettyMoney(form.wholePeriodPrice) }} so'm
+                        </div>
+                        <div class="text-caption text-success" v-if="wholePeriodSavings > 0">
+                          {{ wholePeriodSavingsPercent }}% tejash
+                        </div>
+                      </VCol>
+                      <VCol cols="12" md="4" v-if="wholePeriodSavings > 0">
+                        <div class="text-caption text-medium-emphasis">Tejash</div>
+                        <div class="text-body-1 font-weight-medium text-success">
+                          {{ prettyMoney(wholePeriodSavings) }} so'm
+                        </div>
+                      </VCol>
+                    </VRow>
+                  </VCard>
                 </VCol>
 
                 <!-- Description -->
@@ -1071,6 +1194,18 @@ onMounted(() => {
                   />
                 </VCol>
               </VRow>
+              <VAlert
+                v-if="getDiscountExample(discount)"
+                type="success"
+                variant="tonal"
+                density="compact"
+                class="mt-2 text-body-2"
+              >
+                  <strong>{{ discount.months }} oy uchun:</strong> 
+                  {{ getDiscountExample(discount).monthlyPrice }} x {{ discount.months }} = 
+                  {{ getDiscountExample(discount).totalOriginal }} - {{ getDiscountExample(discount).discountAmount }} (chegirma) = 
+                  <strong>{{ getDiscountExample(discount).totalWithDiscount }} so'm</strong>
+              </VAlert>
             </VCard>
           </VCol>
 

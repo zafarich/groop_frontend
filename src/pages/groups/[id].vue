@@ -57,6 +57,10 @@ const debtorsSummary = ref({
   totalDebtAmount: "0",
 });
 
+// Discounted students state
+const discountedStudents = ref([]);
+const discountedStudentsLoading = ref(false);
+
 // Discount modal state
 const showDiscountModal = ref(false);
 const selectedEnrollment = ref(null);
@@ -216,6 +220,8 @@ const getStudentStatusConfig = (status) => {
       return {color: "info", text: "Lead"};
     case "TRIAL":
       return {color: "warning", text: "Sinov darsidagi"};
+    case "PENDING_JOIN":
+      return {color: "info", text: "Guruhga ulanish kutilmoqda"};
     case "ACTIVE":
       return {color: "success", text: "Faol"};
     case "FROZEN":
@@ -285,7 +291,7 @@ const fetchStudents = async () => {
       `/v1/groups/${groupId.value}/students?${params.toString()}`,
       {
         method: "GET",
-      }
+      },
     );
 
     if (response.success && response.data) {
@@ -328,6 +334,28 @@ const fetchDebtors = async () => {
   }
 };
 
+// Fetch discounted students
+const fetchDiscountedStudents = async () => {
+  discountedStudentsLoading.value = true;
+  try {
+    const response = await $api(
+      `/v1/groups/${groupId.value}/students/discounted`,
+      {
+        method: "GET",
+      },
+    );
+
+    if (response.success && response.data) {
+      discountedStudents.value = response.data.students || [];
+    }
+  } catch (error) {
+    console.error("Error fetching discounted students:", error);
+    showError("Chegirmali o'quvchilar ro'yxatini yuklashda xatolik");
+  } finally {
+    discountedStudentsLoading.value = false;
+  }
+};
+
 // Search handler with debounce
 const searchTimeout = ref(null);
 const onStudentsSearch = () => {
@@ -344,6 +372,8 @@ const onStudentsSearch = () => {
 const onTabChange = () => {
   if (activeTab.value === "debtors") {
     fetchDebtors();
+  } else if (activeTab.value === "students-with-discount") {
+    fetchDiscountedStudents();
   } else {
     studentsPagination.value.page = 1;
     fetchStudents();
@@ -415,7 +445,7 @@ const onStatusChange = async () => {
 
     if (response.success) {
       showSuccess(
-        `Guruh ${newStatus === "ACTIVE" ? "faollashtirildi" : "faolsizlantirildi"}`
+        `Guruh ${newStatus === "ACTIVE" ? "faollashtirildi" : "faolsizlantirildi"}`,
       );
       isStatusDialogVisible.value = false;
       fetchGroupDetails();
@@ -506,7 +536,7 @@ const saveDiscount = async () => {
       {
         method: "PATCH",
         body: payload,
-      }
+      },
     );
 
     if (response.success) {
@@ -550,7 +580,7 @@ const activateStudent = async () => {
         body: {
           lessonStartDate: lessonStartDateForm.value.lessonStartDate,
         },
-      }
+      },
     );
 
     if (response.success) {
@@ -561,7 +591,7 @@ const activateStudent = async () => {
   } catch (error) {
     console.error("Error activating student:", error);
     showError(
-      error.data?.message || "O'quvchini faollashtiriishda xatolik yuz berdi"
+      error.data?.message || "O'quvchini faollashtiriishda xatolik yuz berdi",
     );
   } finally {
     lessonStartDateLoading.value = false;
@@ -608,7 +638,7 @@ const searchStudentsForExclude = (query) => {
     try {
       const response = await $api(
         `/v1/groups/${groupId.value}/students/search?search=${encodeURIComponent(query)}&limit=10`,
-        {method: "GET"}
+        {method: "GET"},
       );
 
       console.log("rerr", response);
@@ -633,7 +663,7 @@ const debtorsToExpel = computed(() => {
     const debtAmount = Number(d.debtAmount);
     const isAboveMin = debtAmount >= bulkExpelForm.value.minDebtAmount;
     const isNotExcluded = !bulkExpelForm.value.excludeEnrollmentIds.includes(
-      d.enrollmentId
+      d.enrollmentId,
     );
     return isAboveMin && isNotExcluded;
   });
@@ -655,21 +685,21 @@ const performBulkExpel = async () => {
           minDebtAmount: bulkExpelForm.value.minDebtAmount,
           excludeEnrollmentIds: bulkExpelForm.value.excludeEnrollmentIds,
         },
-      }
+      },
     );
 
     if (response.success) {
       expelResult.value = response.data;
       showSuccess(
         response.message ||
-          `${response.data.expelledCount} ta qarzdor chiqarildi`
+          `${response.data.expelledCount} ta qarzdor chiqarildi`,
       );
       await fetchDebtors();
     }
   } catch (error) {
     console.error("Error bulk expelling debtors:", error);
     showError(
-      error.data?.message || "Qarzdorlarni chiqarishda xatolik yuz berdi"
+      error.data?.message || "Qarzdorlarni chiqarishda xatolik yuz berdi",
     );
   } finally {
     bulkExpelLoading.value = false;
@@ -731,14 +761,14 @@ const addBalance = async () => {
           amount: balanceForm.value.amount,
           notes: balanceForm.value.notes || "",
         },
-      }
+      },
     );
 
     if (response.success) {
       const previousBalance = response.data.previousBalance;
       const newBalance = response.data.newBalance;
       showSuccess(
-        `To'lov muvaffaqiyatli qo'shildi! Balans: ${prettyMoney(previousBalance)} → ${prettyMoney(newBalance)} so'm`
+        `To'lov muvaffaqiyatli qo'shildi! Balans: ${prettyMoney(previousBalance)} → ${prettyMoney(newBalance)} so'm`,
       );
       showAddBalanceModal.value = false;
       await fetchStudents();
@@ -772,7 +802,7 @@ const expelStudent = async () => {
         body: {
           reason: expelForm.value.reason || undefined,
         },
-      }
+      },
     );
 
     if (response.success) {
@@ -789,7 +819,7 @@ const expelStudent = async () => {
   } catch (error) {
     console.error("Error expelling student:", error);
     showError(
-      error.data?.message || "O'quvchini chiqarishda xatolik yuz berdi"
+      error.data?.message || "O'quvchini chiqarishda xatolik yuz berdi",
     );
   } finally {
     expelLoading.value = false;
@@ -810,21 +840,21 @@ const fetchActivatableStudents = async () => {
       `/v1/groups/${groupId.value}/students?${params.toString()}`,
       {
         method: "GET",
-      }
+      },
     );
 
     if (response.success && response.data) {
       // Filter only TRIAL students
       const allStudents = response.data || [];
       activatableStudents.value = allStudents.filter(
-        (s) => s.status === "TRIAL"
+        (s) => s.status === "TRIAL",
       );
     }
   } catch (error) {
     console.error("Error fetching activatable students:", error);
     // Fallback to current page students filtered
     activatableStudents.value = students.value.filter(
-      (s) => s.status === "TRIAL"
+      (s) => s.status === "TRIAL",
     );
   } finally {
     activatableStudentsLoading.value = false;
@@ -1077,6 +1107,10 @@ watch(studentStatusFilter, () => {
               {{ debtorsSummary.totalDebtors }}
             </VChip>
           </VTab>
+          <VTab value="students-with-discount">
+            <VIcon icon="tabler-discount-2" class="me-1" size="18" />
+            Chegirmalilar
+          </VTab>
         </VTabs>
         <VDivider />
 
@@ -1178,6 +1212,129 @@ watch(studentStatusFilter, () => {
                   </span>
                 </td>
                 <td>{{ formatDate(debtor.lastPaymentDate) }}</td>
+              </tr>
+            </tbody>
+          </VTable>
+        </template>
+
+        <!-- Discounted Students Content (ActiveTab = students-with-discount) -->
+        <template v-else-if="activeTab === 'students-with-discount'">
+          <VCardText>
+            <div class="d-flex align-center justify-space-between mb-4">
+              <div class="text-h6">Chegirmali o'quvchilar</div>
+              <div class="text-body-2 text-medium-emphasis">
+                Jami: {{ discountedStudents.length }} ta
+              </div>
+            </div>
+          </VCardText>
+          <VTable>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>O'quvchi</th>
+                <th>Status</th>
+                <th>Maxsus narx</th>
+                <th>Chegirma muddati</th>
+                <th>Sabab</th>
+                <th>Amallar</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="discountedStudentsLoading">
+                <td colspan="7" class="text-center py-8">
+                  <VProgressCircular indeterminate color="primary" />
+                </td>
+              </tr>
+              <tr v-else-if="discountedStudents.length === 0">
+                <td colspan="7" class="text-center py-8">
+                  <div class="text-body-1 text-medium-emphasis">
+                    Chegirmali o'quvchilar yo'q
+                  </div>
+                </td>
+              </tr>
+              <tr
+                v-else
+                v-for="student in discountedStudents"
+                :key="student.enrollmentId"
+              >
+                <td>{{ student.student.id }}</td>
+                <td>
+                  <div class="d-flex flex-column">
+                    <span class="font-weight-medium"
+                      >{{ student.student.firstName }}
+                      {{ student.student.lastName }}</span
+                    >
+                    <span class="text-caption text-medium-emphasis">{{
+                      prettyPhoneNumber(student.student.phoneNumber)
+                    }}</span>
+                  </div>
+                </td>
+                <td>
+                  <VChip
+                    :color="getStudentStatusConfig(student.status).color"
+                    size="small"
+                    variant="tonal"
+                  >
+                    {{ getStudentStatusConfig(student.status).text }}
+                  </VChip>
+                </td>
+                <td>
+                  <span class="font-weight-medium text-primary">
+                    {{ prettyMoney(student.customMonthlyPrice) }} so'm
+                  </span>
+                  <div
+                    v-if="student.isFreeEnrollment"
+                    class="text-caption text-success"
+                  >
+                    Bepul
+                  </div>
+                </td>
+                <td>
+                  <div
+                    v-if="student.discountStartDate || student.discountEndDate"
+                    class="text-body-2"
+                  >
+                    {{
+                      student.discountStartDate
+                        ? formatDate(student.discountStartDate)
+                        : "Hozirdan"
+                    }}
+                    -
+                    {{
+                      student.discountEndDate
+                        ? formatDate(student.discountEndDate)
+                        : "Cheksiz"
+                    }}
+                  </div>
+                  <span v-else class="text-caption text-medium-emphasis"
+                    >Cheksiz</span
+                  >
+                </td>
+                <td>
+                  <span
+                    v-if="student.discountReason"
+                    class="text-body-2 text-truncate d-inline-block"
+                    style="max-width: 200px"
+                    :title="student.discountReason"
+                  >
+                    {{ student.discountReason }}
+                  </span>
+                  <span v-else class="text-caption text-disabled">-</span>
+                </td>
+                <td>
+                  <VBtn
+                    icon
+                    size="small"
+                    color="default"
+                    variant="text"
+                    @click="openDiscountModal(student)"
+                  >
+                    <VIcon icon="tabler-pencil" />
+                    <VTooltip activator="parent" location="top"
+                      >Tahrirlash</VTooltip
+                    >
+                  </VBtn>
+                </td>
               </tr>
             </tbody>
           </VTable>
@@ -1368,7 +1525,7 @@ watch(studentStatusFilter, () => {
                           v-if="student.student?.user?.telegramUser?.username"
                           @click="
                             openTelegram(
-                              student.student.user.telegramUser.username
+                              student.student.user.telegramUser.username,
                             )
                           "
                         >
@@ -1906,7 +2063,7 @@ watch(studentStatusFilter, () => {
             Yangi balans:
             {{
               prettyMoney(
-                Number(selectedBalanceEnrollment.balance) + balanceForm.amount
+                Number(selectedBalanceEnrollment.balance) + balanceForm.amount,
               )
             }}
             so'm

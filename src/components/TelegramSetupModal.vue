@@ -6,9 +6,13 @@ const props = defineProps({
     type: Boolean,
     required: true,
   },
-  connectToken: {
+  botUsername: {
     type: String,
     default: "",
+  },
+  telegramResourceType: {
+    type: String,
+    default: "PRIVATE_GROUP",
   },
 });
 
@@ -16,15 +20,22 @@ const emit = defineEmits(["update:modelValue", "close"]);
 
 const {success: showSuccess} = useToast();
 
-// Copy token to clipboard
-const copyToken = async () => {
-  if (!props.connectToken) return;
+// Computed label for resource type
+const resourceTypeLabel = computed(() => {
+  return props.telegramResourceType === "PRIVATE_CHANNEL"
+    ? "kanalingizga"
+    : "guruhingizga";
+});
+
+// Copy bot username to clipboard
+const copyBotUsername = async () => {
+  if (!props.botUsername) return;
 
   try {
-    await navigator.clipboard.writeText(`/connect ${props.connectToken}`);
-    showSuccess("Xabar nusxalani. Telegram guruhga jo'nating");
+    await navigator.clipboard.writeText(`@${props.botUsername}`);
+    showSuccess("Bot nomi nusxalandi!");
   } catch (error) {
-    console.error("Failed to copy token:", error);
+    console.error("Failed to copy bot username:", error);
   }
 };
 
@@ -51,7 +62,7 @@ const handleClose = () => {
           size="28"
         />
         <span class="text-h6"
-          >Guruh yaratildi, lekin qo'shimcha sozlash talab qilinadi</span
+          >Guruh yaratildi! Endi Telegram {{ resourceTypeLabel }} ulang</span
         >
       </VCardTitle>
 
@@ -63,7 +74,8 @@ const handleClose = () => {
           <div class="text-body-1">
             Guruh yaratildi, lekin hali to'liq foydalanish uchun tayyor emas.
             <br />
-            O'quvchilar qo'shilishi uchun avval bu guruhni telegram guruhga
+            O'quvchilar qo'shilishi uchun avval bu guruhni Telegram
+            {{ resourceTypeLabel }}
             ulash kerak.
           </div>
         </VAlert>
@@ -81,7 +93,14 @@ const handleClose = () => {
                 </VAvatar>
               </template>
               <VListItemTitle class="text-body-2 text-wrap">
-                Telegramda ham bu guruh uchun alohida guruh yarating
+                <template v-if="telegramResourceType === 'PRIVATE_CHANNEL'">
+                  Telegramda yopiq kanal yarating (yoki mavjud kanaldan
+                  foydalaning)
+                </template>
+                <template v-else>
+                  Telegramda yopiq guruh yarating (yoki mavjud guruhdan
+                  foydalaning)
+                </template>
               </VListItemTitle>
             </VListItem>
             <VListItem class="px-0">
@@ -91,7 +110,18 @@ const handleClose = () => {
                 </VAvatar>
               </template>
               <VListItemTitle class="text-body-2 text-wrap">
-                Botingizni telegram guruhga qo'shing va admin huquqini bering
+                Botingizni {{ resourceTypeLabel }} qo'shing:
+                <VChip
+                  v-if="botUsername"
+                  variant="outlined"
+                  color="info"
+                  class="px-2 py-1 cursor-pointer ml-2"
+                  append-icon="tabler-copy"
+                  size="sm"
+                  @click="copyBotUsername"
+                >
+                  @{{ botUsername }}
+                </VChip>
               </VListItemTitle>
             </VListItem>
             <VListItem class="px-0">
@@ -101,22 +131,31 @@ const handleClose = () => {
                 </VAvatar>
               </template>
               <VListItemTitle class="text-body-2 text-wrap">
-                Telegram guruhga quyidagi xabarni jo'nating:
-
-                <VChip
-                  variant="outlined"
-                  color="info"
-                  class="px-2 py-1 cursor-pointer"
-                  append-icon="tabler-copy"
-                  size="sm"
-                  @click="copyToken"
-                >
-                  /connect {{ connectToken }}
-                </VChip>
+                Botga <strong>administrator</strong> huquqini bering
+              </VListItemTitle>
+            </VListItem>
+            <VListItem class="px-0">
+              <template #prepend>
+                <VAvatar size="24" color="success" variant="tonal" class="me-3">
+                  <VIcon icon="tabler-check" size="14" />
+                </VAvatar>
+              </template>
+              <VListItemTitle class="text-body-2 text-wrap">
+                Bot admin bo'lgandan keyin sizga shaxsiy xabar orqali guruhni
+                tanlash tugmasi keladi
               </VListItemTitle>
             </VListItem>
           </VList>
         </div>
+
+        <!-- Success Note -->
+        <VAlert type="success" variant="tonal" class="mt-4">
+          <div class="text-body-2">
+            <strong>Muhim:</strong> Bot admin bo'lganidan keyin sizga Telegramda
+            xabar keladi. Shu xabardagi tugmani bosib, qaysi guruhni ulash
+            kerakligini tanlaysiz.
+          </div>
+        </VAlert>
       </VCardText>
 
       <VDivider />

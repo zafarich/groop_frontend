@@ -1,18 +1,60 @@
 <script setup>
-import { useAuthStore } from '@/stores/auth'
-import avatar1 from '@images/avatars/avatar-1.png'
+import {computed, watchEffect} from "vue";
+import {useRouter} from "vue-router";
+import {useAuthStore} from "@/stores/auth";
 
-const authStore = useAuthStore()
-const router = useRouter()
+const authStore = useAuthStore();
+const router = useRouter();
 
 // Foydalanuvchi ma'lumotlari
-const userData = computed(() => authStore.currentUser)
+const userData = computed(() => authStore.currentUser);
+
+// Role mapping
+const roleMap = {
+  ADMIN: "Administrator",
+  TEACHER: "O'qituvchi",
+  STUDENT: "O'quvchi",
+  USER: "Foydalanuvchi",
+};
+
+const userRoleLabel = computed(() => {
+  const role = userData.value?.userType || "USER";
+  return roleMap[role] || role;
+});
+
+// User initials (first letter of first and last name)
+const userInitials = computed(() => {
+  const firstName = userData.value?.firstName || "";
+  const lastName = userData.value?.lastName || "";
+  const username = userData.value?.username || "";
+
+  // If we have first and last name, use first letters
+  if (firstName || lastName) {
+    const firstInitial = firstName ? firstName.charAt(0).toUpperCase() : "";
+    const lastInitial = lastName ? lastName.charAt(0).toUpperCase() : "";
+    return (firstInitial + lastInitial).trim() || "U";
+  }
+
+  // Otherwise use first two letters of username
+  if (username) {
+    return username.substring(0, 2).toUpperCase();
+  }
+
+  return "U";
+});
+
+// Debug: Log userData to see what's available
+watchEffect(() => {
+  if (userData.value) {
+    console.log("UserProfile userData:", userData.value);
+  }
+});
 
 // Logout funksiyasi
 const handleLogout = () => {
-  authStore.logout()
-  router.push('/login')
-}
+  authStore.logout();
+  router.push("/login");
+};
 </script>
 
 <template>
@@ -24,20 +66,16 @@ const handleLogout = () => {
     bordered
     color="success"
   >
-    <VAvatar
-      class="cursor-pointer"
-      color="primary"
-      variant="tonal"
-    >
-      <VImg :src="userData?.avatar || avatar1" />
+    <VAvatar class="cursor-pointer" color="primary" variant="tonal">
+      <template v-if="userData?.avatar">
+        <VImg :src="userData.avatar" />
+      </template>
+      <template v-else>
+        <span class="text-h5">{{ userInitials }}</span>
+      </template>
 
       <!-- SECTION Menu -->
-      <VMenu
-        activator="parent"
-        width="230"
-        location="bottom end"
-        offset="14px"
-      >
+      <VMenu activator="parent" width="230" location="bottom end" offset="14px">
         <VList>
           <!-- 👉 User Avatar & Name -->
           <VListItem>
@@ -50,74 +88,37 @@ const handleLogout = () => {
                   offset-y="3"
                   color="success"
                 >
-                  <VAvatar
-                    color="primary"
-                    variant="tonal"
-                  >
-                    <VImg :src="userData?.avatar || avatar1" />
+                  <VAvatar color="primary" variant="tonal">
+                    <template v-if="userData?.avatar">
+                      <VImg :src="userData.avatar" />
+                    </template>
+                    <template v-else>
+                      <span class="text-h6">{{ userInitials }}</span>
+                    </template>
                   </VAvatar>
                 </VBadge>
               </VListItemAction>
             </template>
 
             <VListItemTitle class="font-weight-semibold">
-              {{ userData?.fullName || userData?.username || 'Foydalanuvchi' }}
+              {{
+                userData?.firstName || userData?.lastName
+                  ? `${userData.firstName || ""} ${userData.lastName || ""}`.trim()
+                  : userData?.username || "Foydalanuvchi"
+              }}
             </VListItemTitle>
-            <VListItemSubtitle>{{ userData?.role || 'User' }}</VListItemSubtitle>
+            <VListItemSubtitle>{{ userRoleLabel }}</VListItemSubtitle>
           </VListItem>
 
           <VDivider class="my-2" />
 
           <!-- 👉 Profile -->
-          <VListItem link>
+          <VListItem :to="{name: 'profile'}">
             <template #prepend>
-              <VIcon
-                class="me-2"
-                icon="tabler-user"
-                size="22"
-              />
+              <VIcon class="me-2" icon="tabler-user" size="22" />
             </template>
 
             <VListItemTitle>Profil</VListItemTitle>
-          </VListItem>
-
-          <!-- 👉 Settings -->
-          <VListItem link>
-            <template #prepend>
-              <VIcon
-                class="me-2"
-                icon="tabler-settings"
-                size="22"
-              />
-            </template>
-
-            <VListItemTitle>Sozlamalar</VListItemTitle>
-          </VListItem>
-
-          <!-- 👉 Pricing -->
-          <VListItem link>
-            <template #prepend>
-              <VIcon
-                class="me-2"
-                icon="tabler-currency-dollar"
-                size="22"
-              />
-            </template>
-
-            <VListItemTitle>Narxlar</VListItemTitle>
-          </VListItem>
-
-          <!-- 👉 FAQ -->
-          <VListItem link>
-            <template #prepend>
-              <VIcon
-                class="me-2"
-                icon="tabler-help"
-                size="22"
-              />
-            </template>
-
-            <VListItemTitle>Ko'p so'raladigan savollar</VListItemTitle>
           </VListItem>
 
           <!-- Divider -->
@@ -126,11 +127,7 @@ const handleLogout = () => {
           <!-- 👉 Logout -->
           <VListItem @click="handleLogout">
             <template #prepend>
-              <VIcon
-                class="me-2"
-                icon="tabler-logout"
-                size="22"
-              />
+              <VIcon class="me-2" icon="tabler-logout" size="22" />
             </template>
 
             <VListItemTitle>Chiqish</VListItemTitle>

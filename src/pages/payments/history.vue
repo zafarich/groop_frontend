@@ -1,5 +1,6 @@
 <script setup>
 import {usePayments} from "@/composables/usePayments";
+import {useQueryParams} from "@/composables/useQueryParams";
 import {$api} from "@/utils/api";
 import {prettyMoney} from "@/utils/utils";
 import AppDateTimePicker from "@/@core/components/app-form-elements/AppDateTimePicker.vue";
@@ -81,23 +82,15 @@ const onDateRangeChange = (val) => {
   const {start, end} = calculateDateRange(val);
   startDate.value = start;
   endDate.value = end;
-  onFilterChange();
 };
-
-// Set default initial date range
-onMounted(() => {
-  // Set default dates based on THIS_MONTH
-  const {start, end} = calculateDateRange("THIS_MONTH");
-  startDate.value = start;
-  endDate.value = end;
-});
 
 // Fetch groups
 const fetchGroups = async () => {
   try {
     const res = await $api("/v1/groups?limit=100");
     if (res.success) {
-      groups.value = res.data?.map((g) => ({title: g.name, value: g.id})) || [];
+      groups.value =
+        res.data?.map((g) => ({title: g.name, value: String(g.id)})) || [];
     }
   } catch (e) {
     console.error(e);
@@ -106,10 +99,13 @@ const fetchGroups = async () => {
 
 // Fetch data
 const loadPayments = async () => {
+  // Convert groupFilter to number if it's a string from URL
+  const groupId = groupFilter.value ? Number(groupFilter.value) : undefined;
+
   await fetchPayments({
     status: statusFilter.value || undefined,
     search: searchQuery.value.trim() || undefined,
-    groupId: groupFilter.value || undefined,
+    groupId: groupId,
     startDate: startDate.value || undefined,
     endDate: endDate.value || undefined,
     page: pagination.value.page,
@@ -117,31 +113,27 @@ const loadPayments = async () => {
   });
 };
 
-// Search & Filter handlers
-const searchTimeout = ref(null);
-const onSearch = () => {
-  if (searchTimeout.value) clearTimeout(searchTimeout.value);
-  searchTimeout.value = setTimeout(() => {
-    pagination.value.page = 1;
-    loadPayments();
-  }, 500);
-};
-
-const onFilterChange = () => {
-  pagination.value.page = 1;
-  loadPayments();
-};
-
-const onPageChange = (page) => {
-  pagination.value.page = page;
-  loadPayments();
-};
-
-const onLimitChange = (limit) => {
-  pagination.value.limit = limit;
-  pagination.value.page = 1;
-  loadPayments();
-};
+// Use Query Params Sync
+useQueryParams({
+  filters: {
+    status: statusFilter,
+    search: searchQuery,
+    groupId: groupFilter,
+    startDate: startDate,
+    endDate: endDate,
+  },
+  pagination: pagination,
+  fetchData: loadPayments,
+  defaultFilters: {
+    status: "PAID",
+    search: "",
+    groupId: null,
+    startDate: "",
+    endDate: "",
+  },
+  defaultLimit: 20,
+  debounceTime: 300,
+});
 
 // Receipt modal
 const openReceiptModal = (payment) => {
@@ -193,8 +185,15 @@ const formatDateTime = (dateString) => {
   }).format(date);
 };
 
-onMounted(() => {
-  Promise.all([fetchGroups(), loadPayments()]);
+// Initialize: Set default dates and fetch groups
+onMounted(async () => {
+  // Set default dates based on THIS_MONTH if not set from URL
+  if (!startDate.value && !endDate.value) {
+    const {start, end} = calculateDateRange("THIS_MONTH");
+    startDate.value = start;
+    endDate.value = end;
+  }
+  await fetchGroups();
 });
 </script>
 
@@ -233,7 +232,6 @@ onMounted(() => {
                 :items="statusOptions"
                 density="compact"
                 hide-details
-                @update:model-value="onFilterChange"
               />
             </VCol>
             <VCol cols="12" md="4">
@@ -242,7 +240,6 @@ onMounted(() => {
                 placeholder="Qidirish..."
                 density="compact"
                 hide-details
-                @input="onSearch"
               >
                 <template #prepend-inner>
                   <VIcon icon="tabler-search" size="20" />
@@ -257,7 +254,6 @@ onMounted(() => {
                 density="compact"
                 hide-details
                 clearable
-                @update:model-value="onFilterChange"
               />
             </VCol>
 
@@ -278,7 +274,6 @@ onMounted(() => {
                 placeholder="Dan"
                 density="compact"
                 hide-details
-                @update:model-value="onFilterChange"
               />
             </VCol>
             <VCol cols="12" md="4">
@@ -287,7 +282,6 @@ onMounted(() => {
                 placeholder="Gacha"
                 density="compact"
                 hide-details
-                @update:model-value="onFilterChange"
               />
             </VCol>
           </VRow>
@@ -368,7 +362,6 @@ onMounted(() => {
             v-model="pagination.page"
             :length="meta.totalPages"
             total-visible="5"
-            @update:model-value="onPageChange"
           />
         </VCardText>
       </VCard>
