@@ -47,17 +47,29 @@ watch(
 // SECTION: Bot Setup
 const showBotSetupModal = ref(false);
 const botCheckLoading = ref(true);
+const botConfigured = ref(false);
+const botUsername = ref("");
 
-// Check if bot is configured
+// Check if bot is configured and user has telegram connected
 const checkBotConfiguration = async () => {
   botCheckLoading.value = true;
   try {
+    // Fetch latest user data to check telegramUserId
+    await authStore.fetchUser();
+    
     const response = await $api(`/v1/center-bots/my-bot`, {
       method: "GET",
     });
 
-    // If data is null, show the setup modal
-    showBotSetupModal.value = response.data === null;
+    const hasBot = response.data !== null;
+    const hasTelegramConnected = authStore.userData?.telegramUserId !== null && 
+                                  authStore.userData?.telegramUserId !== undefined;
+
+    botConfigured.value = hasBot;
+    botUsername.value = response.data?.botUsername || "";
+    
+    // Show modal if either bot is not configured OR user hasn't connected Telegram
+    showBotSetupModal.value = !hasBot || !hasTelegramConnected;
   } catch (error) {
     console.error("Error checking bot configuration:", error);
   } finally {
@@ -67,8 +79,7 @@ const checkBotConfiguration = async () => {
 
 // Handle bot configuration success
 const onBotConfigured = () => {
-  showBotSetupModal.value = false;
-  // Optionally refresh bot data
+  // Refresh to check if user has connected Telegram
   checkBotConfiguration();
 };
 
@@ -114,7 +125,11 @@ onMounted(() => {
     <!-- Bot Setup Modal -->
     <BotSetupModal
       v-model="showBotSetupModal"
+      :bot-configured="botConfigured"
+      :user-telegram-connected="authStore.userData?.telegramUserId !== null && authStore.userData?.telegramUserId !== undefined"
+      :initial-username="botUsername"
       @bot-configured="onBotConfigured"
+      @refresh="checkBotConfiguration"
     />
   </Component>
 </template>

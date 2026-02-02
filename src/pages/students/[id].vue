@@ -115,8 +115,9 @@ const fetchBalanceSummary = async () => {
   balanceSummaryLoading.value = true;
   try {
     const res = await $api(`/v1/students/${studentId.value}/balance-summary`);
+    console.log(res);
     if (res.success) {
-      balanceSummary.value = res.data?.data;
+      balanceSummary.value = res?.data;
     }
   } catch (err) {
     console.error(err);

@@ -1200,8 +1200,22 @@ watch(studentStatusFilter, () => {
               </tr>
               <tr v-else v-for="debtor in debtors" :key="debtor.enrollmentId">
                 <td>{{ debtor.student.id }}</td>
-                <td>{{ debtor.student.firstName }}</td>
-                <td>{{ debtor.student.lastName }}</td>
+                <td>
+                  <a
+                    class="font-weight-medium text-primary cursor-pointer"
+                    @click="router.push(`/students/${debtor.student.id}`)"
+                  >
+                    {{ debtor.student.firstName }}
+                  </a>
+                </td>
+                <td>
+                  <a
+                    class="font-weight-medium text-primary cursor-pointer"
+                    @click="router.push(`/students/${debtor.student.id}`)"
+                  >
+                    {{ debtor.student.lastName }}
+                  </a>
+                </td>
                 <td>{{ prettyPhoneNumber(debtor.student.phoneNumber) }}</td>
                 <td>
                   <VChip
@@ -1282,10 +1296,13 @@ watch(studentStatusFilter, () => {
                 <td>{{ student.student.id }}</td>
                 <td>
                   <div class="d-flex flex-column">
-                    <span class="font-weight-medium"
-                      >{{ student.student.firstName }}
-                      {{ student.student.lastName }}</span
+                    <a
+                      class="font-weight-medium text-primary cursor-pointer"
+                      @click="router.push(`/students/${student.student.id}`)"
                     >
+                      {{ student.student.firstName }}
+                      {{ student.student.lastName }}
+                    </a>
                     <span class="text-caption text-medium-emphasis">{{
                       prettyPhoneNumber(student.student.phoneNumber)
                     }}</span>
@@ -1451,10 +1468,13 @@ watch(studentStatusFilter, () => {
               <tr v-else v-for="student in students" :key="student.id">
                 <td>
                   <div class="d-flex flex-column">
-                    <span class="font-weight-medium">
+                    <a
+                      class="font-weight-medium text-primary cursor-pointer"
+                      @click="viewStudentProfile(student)"
+                    >
                       {{ student.student.firstName }}
                       {{ student.student.lastName }}
-                    </span>
+                    </a>
                     <span class="text-caption text-medium-emphasis">
                       {{ prettyPhoneNumber(student.student.user.phoneNumber) }}
                     </span>
@@ -1976,7 +1996,12 @@ watch(studentStatusFilter, () => {
             <tbody>
               <tr v-for="debtor in debtorsToExpel" :key="debtor.enrollmentId">
                 <td>
-                  {{ debtor.student.firstName }} {{ debtor.student.lastName }}
+                  <a
+                    class="text-primary cursor-pointer"
+                    @click="router.push(`/students/${debtor.student.id}`)"
+                  >
+                    {{ debtor.student.firstName }} {{ debtor.student.lastName }}
+                  </a>
                 </td>
                 <td>{{ prettyPhoneNumber(debtor.student.phoneNumber) }}</td>
                 <td class="text-error">

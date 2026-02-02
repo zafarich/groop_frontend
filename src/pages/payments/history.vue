@@ -11,6 +11,8 @@ definePage({
   },
 });
 
+const router = useRouter();
+
 const {payments, meta, loading, fetchPayments} = usePayments();
 
 // State
@@ -311,9 +313,12 @@ onMounted(async () => {
             <tr v-else v-for="payment in payments" :key="payment.id">
               <td>{{ payment.id }}</td>
               <td>
-                <div class="font-weight-medium">
+                <a
+                  class="font-weight-medium text-primary cursor-pointer"
+                  @click="router.push(`/students/${payment.student?.id}`)"
+                >
                   {{ getStudentName(payment) }}
-                </div>
+                </a>
                 <div class="text-caption text-disabled">
                   {{ getStudentPhone(payment) }}
                 </div>

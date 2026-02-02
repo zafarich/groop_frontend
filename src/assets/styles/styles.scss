@@ -5,3 +5,7 @@
   z-index: 9999 !important; /* Use a high value */
   position: fixed !important; /* Sometimes position: fixed works better inside modals */
 }
+.vdp-datepicker__calendar {
+    position: fixed !important;
+    z-index: 10000; /* Use a high value */
+  }

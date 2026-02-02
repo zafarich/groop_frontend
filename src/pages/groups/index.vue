@@ -247,7 +247,12 @@ useQueryParams({
             <tr v-else v-for="group in groups" :key="group.id">
               <td>{{ group.id }}</td>
               <td>
-                <div class="font-weight-medium">{{ group.name }}</div>
+                <a
+                  class="font-weight-medium text-primary cursor-pointer"
+                  @click="router.push(`/groups/${group.id}`)"
+                >
+                  {{ group.name }}
+                </a>
                 <!-- <div
                   class="text-caption text-medium-emphasis"
                   v-if="group.description"

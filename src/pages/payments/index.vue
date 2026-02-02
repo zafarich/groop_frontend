@@ -11,6 +11,8 @@ definePage({
   },
 });
 
+const router = useRouter();
+
 const {success: showSuccess, error: showError} = useToast();
 const {
   payments,
@@ -483,9 +485,12 @@ onMounted(async () => {
             <tr v-else v-for="payment in payments" :key="payment.id">
               <td>{{ payment.id }}</td>
               <td>
-                <div class="font-weight-medium">
+                <a
+                  class="font-weight-medium text-primary cursor-pointer"
+                  @click="router.push(`/students/${payment.student?.id}`)"
+                >
                   {{ getStudentName(payment) }}
-                </div>
+                </a>
                 <div class="text-caption text-medium-emphasis">
                   {{ getStudentPhone(payment) }}
                 </div>
@@ -573,9 +578,12 @@ onMounted(async () => {
         <VRow class="mb-4">
           <VCol cols="6">
             <div class="text-caption text-medium-emphasis">O'quvchi</div>
-            <div class="font-weight-medium">
+            <a
+              class="font-weight-medium text-primary cursor-pointer"
+              @click="router.push(`/students/${selectedReceipt.student?.id}`)"
+            >
               {{ getStudentName(selectedReceipt) }}
-            </div>
+            </a>
             <div class="text-body-2">
               {{ getStudentPhone(selectedReceipt) }}
             </div>

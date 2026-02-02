@@ -19,9 +19,17 @@ const props = defineProps({
     type: [Number, String],
     default: null,
   },
+  botConfigured: {
+    type: Boolean,
+    default: false,
+  },
+  userTelegramConnected: {
+    type: Boolean,
+    default: false,
+  },
 });
 
-const emit = defineEmits(["update:modelValue", "botConfigured"]);
+const emit = defineEmits(["update:modelValue", "botConfigured", "refresh"]);
 
 const {success: showSuccess, error: showError} = useToast();
 
@@ -29,6 +37,8 @@ const form = ref({
   botUsername: "",
   botToken: "",
 });
+
+const checkingConnection = ref(false);
 
 watch(
   () => props.modelValue,
@@ -107,6 +117,16 @@ const onSubmit = async () => {
   }
 };
 
+// Check if user has connected Telegram
+const checkTelegramConnection = async () => {
+  checkingConnection.value = true;
+  try {
+    await emit("refresh");
+  } finally {
+    checkingConnection.value = false;
+  }
+};
+
 function normalizeUsername(username) {
   if (username.startsWith("@")) return username.replace("@", "");
   if (username.startsWith("https://t.me/"))
@@ -130,90 +150,148 @@ function normalizeUsername(username) {
 
       <VDivider />
 
-      <VCardText>
-        <VAlert type="info" variant="tonal" class="mb-4">
-          <div class="text-body-2">
-            BotFather orqali bot yarating (
-            <a
-              href="https://t.me/botfather"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="text-primary"
-            >
-              @botfather
-            </a>
-            ). Keyin bot username va tokenni quyidagi formaga kiriting. Bu
-            tizimning to'g'ri ishlashi uchun zarur!
-          </div>
-        </VAlert>
-
-        <!-- Error alert -->
-        <VAlert
-          v-if="errorMessage"
-          type="error"
-          variant="tonal"
-          closable
-          class="mb-4"
-          @click:close="errorMessage = ''"
-        >
-          {{ errorMessage }}
-        </VAlert>
-
-        <VForm @submit.prevent="onSubmit">
-          <VRow>
-            <!-- Bot Username -->
-            <VCol cols="12">
-              <AppTextField
-                v-model="form.botUsername"
-                label="Bot Username *"
-                placeholder="mybot_bot"
-                :rules="[rules.required, rules.botUsername]"
-                hint="Bot username '_bot' bilan tugashi kerak"
-                persistent-hint
+      <!-- Step 1: Bot Configuration -->
+      <template v-if="!botConfigured">
+        <VCardText>
+          <VAlert type="info" variant="tonal" class="mb-4">
+            <div class="text-body-2">
+              BotFather orqali bot yarating (
+              <a
+                href="https://t.me/botfather"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-primary"
               >
-                <template #prepend-inner>
-                  <span class="text-body-1 text-high-emphasis me-1">@</span>
-                </template>
-              </AppTextField>
-            </VCol>
+                @botfather
+              </a>
+              ). Keyin bot username va tokenni quyidagi formaga kiriting. Bu
+              tizimning to'g'ri ishlashi uchun zarur!
+            </div>
+          </VAlert>
 
-            <!-- Bot Token -->
-            <VCol cols="12">
-              <AppTextField
-                v-model="form.botToken"
-                label="Bot Token *"
-                placeholder="1234567890:ABCdefGHIjklMNOpqrsTUVwxyz"
-                type="password"
-                :rules="[rules.botToken]"
-                hint="BotFather dan olingan token"
-                persistent-hint
-              />
-            </VCol>
-          </VRow>
-        </VForm>
-      </VCardText>
+          <!-- Error alert -->
+          <VAlert
+            v-if="errorMessage"
+            type="error"
+            variant="tonal"
+            closable
+            class="mb-4"
+            @click:close="errorMessage = ''"
+          >
+            {{ errorMessage }}
+          </VAlert>
 
-      <VCardActions>
-        <VSpacer />
-        <VBtn
-          v-if="isEditMode"
-          color="secondary"
-          variant="outlined"
-          @click="emit('update:modelValue', false)"
-          :disabled="loading"
-        >
-          Bekor qilish
-        </VBtn>
-        <VBtn
-          color="primary"
-          variant="elevated"
-          :loading="loading"
-          :disabled="loading"
-          @click="onSubmit"
-        >
-          Saqlash
-        </VBtn>
-      </VCardActions>
+          <VForm @submit.prevent="onSubmit">
+            <VRow>
+              <!-- Bot Username -->
+              <VCol cols="12">
+                <AppTextField
+                  v-model="form.botUsername"
+                  label="Bot Username *"
+                  placeholder="mybot_bot"
+                  :rules="[rules.required, rules.botUsername]"
+                  hint="Bot username '_bot' bilan tugashi kerak"
+                  persistent-hint
+                >
+                  <template #prepend-inner>
+                    <span class="text-body-1 text-high-emphasis me-1">@</span>
+                  </template>
+                </AppTextField>
+              </VCol>
+
+              <!-- Bot Token -->
+              <VCol cols="12">
+                <AppTextField
+                  v-model="form.botToken"
+                  label="Bot Token *"
+                  placeholder="1234567890:ABCdefGHIjklMNOpqrsTUVwxyz"
+                  type="password"
+                  :rules="[rules.botToken]"
+                  hint="BotFather dan olingan token"
+                  persistent-hint
+                />
+              </VCol>
+            </VRow>
+          </VForm>
+        </VCardText>
+
+        <VCardActions>
+          <VSpacer />
+          <VBtn
+            v-if="isEditMode"
+            color="secondary"
+            variant="outlined"
+            @click="emit('update:modelValue', false)"
+            :disabled="loading"
+          >
+            Bekor qilish
+          </VBtn>
+          <VBtn
+            color="primary"
+            variant="elevated"
+            :loading="loading"
+            :disabled="loading"
+            @click="onSubmit"
+          >
+            Saqlash
+          </VBtn>
+        </VCardActions>
+      </template>
+
+      <!-- Step 2: Connect Telegram Account -->
+      <template v-else-if="botConfigured && !userTelegramConnected">
+        <VCardText>
+          <VAlert type="success" variant="tonal" class="mb-4">
+            <div class="text-body-2">
+              <VIcon icon="tabler-check" class="me-1" />
+              Bot muvaffaqiyatli sozlandi!
+            </div>
+          </VAlert>
+
+          <VAlert type="warning" variant="tonal" class="mb-4">
+            <div class="text-body-2">
+              <strong>Keyingi qadam:</strong> Tizimdan to'liq foydalanish uchun
+              o'z Telegram akkauntingizni ulashingiz kerak.
+            </div>
+          </VAlert>
+
+          <div class="text-body-1 mb-4">
+            <p class="mb-2">Quyidagi qadamlarni bajaring:</p>
+            <ol class="ms-4">
+              <li class="mb-1">
+                Yaratilgan botga
+                <strong>@{{ initialUsername }}</strong> ga kiring
+              </li>
+              <li class="mb-1">
+                <strong>/start</strong> buyrug'ini yuboring
+              </li>
+              <li>Telefon raqamingizni tasdiqlang</li>
+            </ol>
+          </div>
+
+          <VAlert type="info" variant="tonal" class="mb-4">
+            <div class="text-body-2">
+              <VIcon icon="tabler-info-circle" class="me-1" />
+              Bu qadam admin sifatida tizimga kirish va bot orqali xabarlar
+              olish uchun zarur.
+            </div>
+          </VAlert>
+        </VCardText>
+
+        <VCardActions>
+          <VSpacer />
+          <VBtn
+            color="primary"
+            variant="elevated"
+            :loading="checkingConnection"
+            :disabled="checkingConnection"
+            @click="checkTelegramConnection"
+            prepend-icon="tabler-refresh"
+          >
+            Tekshirish
+          </VBtn>
+        </VCardActions>
+      </template>
     </VCard>
   </VDialog>
 </template>
