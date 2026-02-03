@@ -47,6 +47,10 @@ const studentsPagination = ref({
   totalPages: 0,
 });
 
+// Sort state
+const sortBy = ref('joinedAt');
+const sortOrder = ref('desc');
+
 // Activatable students (only TRIAL for bulk activation)
 const activatableStudents = ref([]);
 const activatableStudentsLoading = ref(false);
@@ -269,6 +273,8 @@ const fetchStudents = async () => {
     const params = new URLSearchParams({
       page: studentsPagination.value.page.toString(),
       limit: studentsPagination.value.limit.toString(),
+      sortBy: sortBy.value,
+      sortOrder: sortOrder.value,
     });
 
     // Add status filter based on active tab and filter
@@ -1384,7 +1390,7 @@ watch(studentStatusFilter, () => {
           <VCardText>
             <VRow>
               <!-- Search -->
-              <VCol cols="12" md="5">
+              <VCol cols="12" md="4">
                 <AppTextField
                   v-model="studentsSearch"
                   placeholder="Qidirish..."
@@ -1414,8 +1420,34 @@ watch(studentStatusFilter, () => {
                 />
               </VCol>
 
+              <!-- Sort Controls -->
+              <VCol cols="12" md="4">
+                <VSelect
+                  v-model="sortBy"
+                  :items="[
+                    {title: 'ID', value: 'id'},
+                    {title: 'Qoshilgan sana', value: 'joinedAt'},
+                    {title: 'Status', value: 'status'},
+                    {title: 'Balans', value: 'balance'},
+                    {title: 'Ism', value: 'studentName'},
+                  ]"
+                  label="Saralash"
+                  hide-details
+                  @update:model-value="fetchStudents"
+                />
+              </VCol>
+
+              <VCol cols="12" md="1">
+                <VBtn
+                  variant="outlined"
+                  size="small"
+                  @click="sortOrder = sortOrder === 'asc' ? 'desc' : 'asc'; fetchStudents()"
+                  :icon="sortOrder === 'asc' ? 'tabler-arrow-up' : 'tabler-arrow-down'"
+                />
+              </VCol>
+
               <!-- Bulk Action -->
-              <VCol cols="12" md="4" class="text-end">
+              <VCol cols="12" md="4">
                 <VBtn
                   color="primary"
                   variant="elevated"
@@ -1443,6 +1475,7 @@ watch(studentStatusFilter, () => {
           <VTable>
             <thead>
               <tr>
+                <th>ID</th>
                 <th>Ism Familiya</th>
                 <th>Status</th>
                 <th>Balans</th>
@@ -1452,13 +1485,13 @@ watch(studentStatusFilter, () => {
             <tbody>
               <!-- Loading -->
               <tr v-if="studentsLoading">
-                <td colspan="4" class="text-center py-8">
+                <td colspan="5" class="text-center py-8">
                   <VProgressCircular indeterminate color="primary" />
                 </td>
               </tr>
               <!-- Empty -->
               <tr v-else-if="students.length === 0">
-                <td colspan="4" class="text-center py-8">
+                <td colspan="5" class="text-center py-8">
                   <div class="text-body-1 text-medium-emphasis">
                     {{ isChannel ? 'Obunachilar topilmadi' : "O'quvchilar topilmadi" }}
                   </div>
@@ -1466,6 +1499,9 @@ watch(studentStatusFilter, () => {
               </tr>
               <!-- Rows -->
               <tr v-else v-for="student in students" :key="student.id">
+                <td>
+                  <span class="text-caption text-medium-emphasis">#{{ student.id }}</span>
+                </td>
                 <td>
                   <div class="d-flex flex-column">
                     <a
