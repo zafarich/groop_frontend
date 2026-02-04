@@ -314,9 +314,12 @@ onMounted(() => {
             <tr v-else v-for="student in students" :key="student.id">
               <td>
                 <div class="d-flex flex-column">
-                  <span class="font-weight-medium">
+                  <RouterLink
+                    :to="`/students/${student.id}`"
+                    class="font-weight-medium text-primary"
+                  >
                     {{ student.firstName }} {{ student.lastName }}
-                  </span>
+                  </RouterLink>
                   <span class="text-caption text-medium-emphasis">
                     {{ prettyPhoneNumber(student.phoneNumber) }}
                   </span>

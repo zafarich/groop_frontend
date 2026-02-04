@@ -1,5 +1,6 @@
 <script setup>
 import AppDateTimePicker from "@/@core/components/app-form-elements/AppDateTimePicker.vue";
+import {TeachersModal, SchedulesModal, DiscountsModal} from "@/components/groups";
 import {useToast} from "@/composables/useToast";
 import {$api} from "@/utils/api";
 import {prettyMoney} from "@/utils/utils";
@@ -17,7 +18,7 @@ const {success: showSuccess, error: showError} = useToast();
 const groupId = computed(() => route.params.id);
 
 // Group type detection
-const groupType = ref(null); // 'PRIVATE_GROUP' or 'PRIVATE_CHANNEL'
+const groupType = ref(null);
 const isChannel = computed(() => groupType.value === 'PRIVATE_CHANNEL');
 
 // Form data
@@ -39,22 +40,17 @@ const loading = ref(false);
 const loadingData = ref(false);
 const errorMessage = ref("");
 
-// Teachers management
+// Related data
 const teachers = ref([]);
 const teachersList = ref([]);
 const loadingTeachers = ref(false);
-const showTeachersModal = ref(false);
-const teachersForm = ref([]);
-
-// Schedules management
 const schedules = ref([]);
-const showSchedulesModal = ref(false);
-const schedulesForm = ref([]);
-
-// Discounts management
 const discounts = ref([]);
+
+// Modal states
+const showTeachersModal = ref(false);
+const showSchedulesModal = ref(false);
 const showDiscountsModal = ref(false);
-const discountsForm = ref([]);
 
 // Payment type options
 const paymentTypes = [
@@ -99,11 +95,6 @@ const rules = {
   requiredNumber: (value) =>
     (value !== null && value !== "" && value >= 0) || "To'ldirish shart",
   positiveNumber: (value) => value > 0 || "Musbat son bo'lishi kerak",
-  timeFormat: (value) => {
-    if (!value) return "To'ldirish shart";
-    const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
-    return timeRegex.test(value) || "HH:MM formatida kiriting (masalan: 09:00)";
-  },
 };
 
 // Money formatting
@@ -173,40 +164,13 @@ const wholePeriodSavingsPercent = computed(() => {
   return Math.round((wholePeriodSavings.value / totalMonthlyPayment.value) * 100);
 });
 
-const formatDiscountAmount = (index, value) => {
-  const numericValue = value.replace(/\s/g, "");
-  const number = parseInt(numericValue, 10);
-  if (isNaN(number)) {
-    discountsForm.value[index].discountAmount = null;
-    discountsForm.value[index].discountAmountDisplay = "";
-  } else {
-    discountsForm.value[index].discountAmount = number;
-    discountsForm.value[index].discountAmountDisplay = prettyMoney(number);
-  }
-};
-
-const getDiscountExample = (discount) => {
-  if (!form.value.monthlyPrice || !discount.months || !discount.discountAmount) return null;
-  
-  const totalOriginal = form.value.monthlyPrice * discount.months;
-  const totalWithDiscount = totalOriginal - discount.discountAmount;
-  
-  return {
-    monthlyPrice: prettyMoney(form.value.monthlyPrice),
-    months: discount.months,
-    totalOriginal: prettyMoney(totalOriginal),
-    discountAmount: prettyMoney(discount.discountAmount),
-    totalWithDiscount: prettyMoney(totalWithDiscount)
-  };
-};
-
 // Convert date to ISO 8601 format
 const convertDateToISO = (value) => {
   if (!value) return undefined;
 
   const dateString = String(value).trim();
 
-  // Handle DD.MM.YYYY format (e.g. 15.01.2025)
+  // Handle DD.MM.YYYY format
   if (/^\d{1,2}\.\d{1,2}\.\d{4}$/.test(dateString)) {
     const [day, month, year] = dateString.split(".");
     const date = new Date(Date.UTC(year, month - 1, day));
@@ -225,7 +189,7 @@ const convertDateToISO = (value) => {
     return dateString;
   }
 
-  // Fallback: Try to parse as Date
+  // Fallback
   try {
     const date = new Date(dateString);
     if (!isNaN(date.getTime())) {
@@ -259,7 +223,6 @@ const fetchGroupDetails = async () => {
     if (response.success && response.data) {
       const group = response.data;
 
-      // Set group type for conditional rendering
       groupType.value = group.telegramResourceType || 'PRIVATE_GROUP';
 
       form.value = {
@@ -276,7 +239,6 @@ const fetchGroupDetails = async () => {
         studentsCanWrite: group.studentsCanWrite ?? true,
       };
 
-      // Load related data (only for groups, not channels)
       teachers.value = group.groupTeachers || [];
       schedules.value = group.lessonSchedules || [];
       discounts.value = group.discounts || [];
@@ -317,38 +279,15 @@ const fetchTeachersList = async () => {
 
 // Teachers management
 const openTeachersModal = () => {
-  teachersForm.value = teachers.value.map((t) => ({
-    teacherId: t.teacherId,
-    isPrimary: t.isPrimary,
-  }));
-  if (teachersForm.value.length === 0) {
-    teachersForm.value.push({teacherId: null, isPrimary: true});
-  }
   showTeachersModal.value = true;
 };
 
-const addTeacher = () => {
-  teachersForm.value.push({teacherId: null, isPrimary: false});
-};
-
-const removeTeacher = (index) => {
-  if (teachersForm.value.length > 1) {
-    teachersForm.value.splice(index, 1);
-  }
-};
-
-const setPrimaryTeacher = (index) => {
-  teachersForm.value.forEach((teacher, i) => {
-    teacher.isPrimary = i === index;
-  });
-};
-
-const saveTeachers = async () => {
+const saveTeachers = async (teachersData) => {
   loading.value = true;
   try {
     const response = await $api(`/v1/groups/${groupId.value}/teachers`, {
       method: "PUT",
-      body: {teachers: teachersForm.value},
+      body: {teachers: teachersData},
     });
 
     if (response.success) {
@@ -367,33 +306,15 @@ const saveTeachers = async () => {
 
 // Schedules management
 const openSchedulesModal = () => {
-  schedulesForm.value = schedules.value.map((s) => ({
-    dayOfWeek: s.dayOfWeek,
-    startTime: s.startTime,
-    endTime: s.endTime,
-  }));
-  if (schedulesForm.value.length === 0) {
-    schedulesForm.value.push({dayOfWeek: null, startTime: "", endTime: ""});
-  }
   showSchedulesModal.value = true;
 };
 
-const addSchedule = () => {
-  schedulesForm.value.push({dayOfWeek: null, startTime: "", endTime: ""});
-};
-
-const removeSchedule = (index) => {
-  if (schedulesForm.value.length > 1) {
-    schedulesForm.value.splice(index, 1);
-  }
-};
-
-const saveSchedules = async () => {
+const saveSchedules = async (schedulesData) => {
   loading.value = true;
   try {
     const response = await $api(`/v1/groups/${groupId.value}/schedules`, {
       method: "PUT",
-      body: {schedules: schedulesForm.value},
+      body: {schedules: schedulesData},
     });
 
     if (response.success) {
@@ -412,37 +333,15 @@ const saveSchedules = async () => {
 
 // Discounts management
 const openDiscountsModal = () => {
-  discountsForm.value = discounts.value.map((d) => ({
-    months: d.months,
-    discountAmount: Number(d.discountAmount),
-    discountAmountDisplay: prettyMoney(Number(d.discountAmount)),
-  }));
   showDiscountsModal.value = true;
 };
 
-const addDiscount = () => {
-  discountsForm.value.push({
-    months: null,
-    discountAmount: null,
-    discountAmountDisplay: "",
-  });
-};
-
-const removeDiscount = (index) => {
-  discountsForm.value.splice(index, 1);
-};
-
-const saveDiscounts = async () => {
+const saveDiscounts = async (discountsData) => {
   loading.value = true;
   try {
-    const payload = discountsForm.value.map((d) => ({
-      months: d.months,
-      discountAmount: d.discountAmount,
-    }));
-
     const response = await $api(`/v1/groups/${groupId.value}/discounts`, {
       method: "PUT",
-      body: {discounts: payload},
+      body: {discounts: discountsData},
     });
 
     if (response.success) {
@@ -473,7 +372,6 @@ const validateForm = () => {
     return false;
   }
 
-  // Skip course dates and payment type validation for channels
   if (!isChannel.value) {
     if (!form.value.courseStartDate) {
       errorMessage.value = "Kurs boshlanish sanasini kiriting";
@@ -490,7 +388,6 @@ const validateForm = () => {
       return false;
     }
 
-    // Validate lessons per payment period for LESSON_BASED
     if (
       form.value.paymentType === "LESSON_BASED" &&
       (!form.value.lessonsPerPaymentPeriod ||
@@ -514,7 +411,6 @@ const onSubmit = async () => {
   errorMessage.value = "";
 
   try {
-    // Base payload for both channels and groups
     const payload = {
       name: form.value.name,
       description: form.value.description || undefined,
@@ -522,7 +418,6 @@ const onSubmit = async () => {
       studentsCanWrite: form.value.studentsCanWrite,
     };
 
-    // Add group-specific fields only for groups (not channels)
     if (!isChannel.value) {
       const startDateISO = convertDateToISO(form.value.courseStartDate);
       const endDateISO = convertDateToISO(form.value.courseEndDate);
@@ -988,280 +883,28 @@ onMounted(() => {
   </VRow>
 
   <!-- Teachers Modal -->
-  <VDialog v-model="showTeachersModal" max-width="800">
-    <VCard>
-      <VCardTitle class="text-h5 pt-4 px-6">
-        O'qituvchilarni tahrirlash
-      </VCardTitle>
-
-      <VDivider />
-
-      <VCardText>
-        <VRow>
-          <VCol v-for="(teacher, index) in teachersForm" :key="index" cols="12">
-            <VCard variant="outlined" class="pa-4">
-              <VRow>
-                <VCol cols="12" md="8">
-                  <AppSelect
-                    v-model="teacher.teacherId"
-                    :items="teachersList"
-                    label="O'qituvchi *"
-                    placeholder="O'qituvchini tanlang"
-                    :loading="loadingTeachers"
-                  />
-                </VCol>
-                <VCol cols="12" md="4" class="d-flex gap-2 align-center">
-                  <VCheckbox
-                    :model-value="teacher.isPrimary"
-                    label="Asosiy"
-                    hide-details
-                    @update:model-value="setPrimaryTeacher(index)"
-                  />
-                  <VBtn
-                    v-if="teachersForm.length > 1"
-                    size="small"
-                    color="error"
-                    variant="text"
-                    icon="tabler-trash"
-                    @click="removeTeacher(index)"
-                  />
-                </VCol>
-              </VRow>
-            </VCard>
-          </VCol>
-
-          <VCol cols="12">
-            <VBtn
-              color="primary"
-              variant="outlined"
-              prepend-icon="tabler-plus"
-              @click="addTeacher"
-            >
-              O'qituvchi qo'shish
-            </VBtn>
-          </VCol>
-        </VRow>
-      </VCardText>
-
-      <VCardActions>
-        <VSpacer />
-        <VBtn
-          color="secondary"
-          variant="outlined"
-          @click="showTeachersModal = false"
-          :disabled="loading"
-        >
-          Bekor qilish
-        </VBtn>
-        <VBtn
-          color="primary"
-          variant="elevated"
-          @click="saveTeachers"
-          :loading="loading"
-          :disabled="loading"
-        >
-          Saqlash
-        </VBtn>
-      </VCardActions>
-    </VCard>
-  </VDialog>
+  <TeachersModal
+    v-model="showTeachersModal"
+    :teachers="teachers"
+    :teachers-list="teachersList"
+    :loading="loading"
+    @save="saveTeachers"
+  />
 
   <!-- Schedules Modal -->
-  <VDialog v-model="showSchedulesModal" max-width="800">
-    <VCard>
-      <VCardTitle class="text-h5 pt-4 px-6">
-        Dars jadvalini tahrirlash
-      </VCardTitle>
-
-      <VDivider />
-
-      <VCardText>
-        <VRow>
-          <VCol
-            v-for="(schedule, index) in schedulesForm"
-            :key="index"
-            cols="12"
-          >
-            <VCard variant="outlined" class="pa-4">
-              <VRow>
-                <VCol cols="12" md="4">
-                  <AppSelect
-                    v-model="schedule.dayOfWeek"
-                    :items="daysOfWeek"
-                    label="Kun *"
-                    placeholder="Hafta kunini tanlang"
-                  />
-                </VCol>
-                <VCol cols="12" md="3">
-                  <AppTextField
-                    v-model="schedule.startTime"
-                    label="Boshlanish vaqti *"
-                    placeholder="16:00"
-                    v-mask="'##:##'"
-                  />
-                </VCol>
-                <VCol cols="12" md="3">
-                  <AppTextField
-                    v-model="schedule.endTime"
-                    label="Tugash vaqti *"
-                    placeholder="18:00"
-                    v-mask="'##:##'"
-                  />
-                </VCol>
-                <VCol cols="12" md="2" class="d-flex align-center">
-                  <VBtn
-                    v-if="schedulesForm.length > 1"
-                    size="small"
-                    color="error"
-                    variant="text"
-                    icon="tabler-trash"
-                    @click="removeSchedule(index)"
-                  />
-                </VCol>
-              </VRow>
-            </VCard>
-          </VCol>
-
-          <VCol cols="12">
-            <VBtn
-              color="primary"
-              variant="outlined"
-              prepend-icon="tabler-plus"
-              @click="addSchedule"
-            >
-              Jadval qo'shish
-            </VBtn>
-          </VCol>
-        </VRow>
-      </VCardText>
-
-      <VCardActions>
-        <VSpacer />
-        <VBtn
-          color="secondary"
-          variant="outlined"
-          @click="showSchedulesModal = false"
-          :disabled="loading"
-        >
-          Bekor qilish
-        </VBtn>
-        <VBtn
-          color="primary"
-          variant="elevated"
-          @click="saveSchedules"
-          :loading="loading"
-          :disabled="loading"
-        >
-          Saqlash
-        </VBtn>
-      </VCardActions>
-    </VCard>
-  </VDialog>
+  <SchedulesModal
+    v-model="showSchedulesModal"
+    :schedules="schedules"
+    :loading="loading"
+    @save="saveSchedules"
+  />
 
   <!-- Discounts Modal -->
-  <VDialog v-model="showDiscountsModal" max-width="800">
-    <VCard>
-      <VCardTitle class="text-h5 pt-4 px-6">
-        Chegirmalarni tahrirlash
-      </VCardTitle>
-
-      <VDivider />
-
-      <VCardText>
-        <VAlert
-          v-if="discountsForm.length > 0"
-          type="info"
-          variant="tonal"
-          density="compact"
-          class="mb-4"
-        >
-          1 oydan ko'p muddatga to'laganda chegirma bo'ladigan holatdagi
-          chegirma turi. Nechta oy uchun to'lasa umumiy qancha chegirma
-          bo'lishini kiriting
-        </VAlert>
-
-        <VRow>
-          <VCol
-            v-for="(discount, index) in discountsForm"
-            :key="index"
-            cols="12"
-          >
-            <VCard variant="outlined" class="pa-4">
-              <VRow>
-                <VCol cols="12" md="5">
-                  <AppTextField
-                    v-model.number="discount.months"
-                    type="number"
-                    label="Oylar soni *"
-                    placeholder="3"
-                  />
-                </VCol>
-                <VCol cols="12" md="5">
-                  <AppTextField
-                    v-model="discount.discountAmountDisplay"
-                    label="Chegirma miqdori (so'm) *"
-                    placeholder="100 000"
-                    @input="formatDiscountAmount(index, $event.target.value)"
-                  />
-                </VCol>
-                <VCol cols="12" md="2" class="d-flex align-center">
-                  <VBtn
-                    size="small"
-                    color="error"
-                    variant="text"
-                    icon="tabler-trash"
-                    @click="removeDiscount(index)"
-                  />
-                </VCol>
-              </VRow>
-              <VAlert
-                v-if="getDiscountExample(discount)"
-                type="success"
-                variant="tonal"
-                density="compact"
-                class="mt-2 text-body-2"
-              >
-                  <strong>{{ discount.months }} oy uchun:</strong> 
-                  {{ getDiscountExample(discount).monthlyPrice }} x {{ discount.months }} = 
-                  {{ getDiscountExample(discount).totalOriginal }} - {{ getDiscountExample(discount).discountAmount }} (chegirma) = 
-                  <strong>{{ getDiscountExample(discount).totalWithDiscount }} so'm</strong>
-              </VAlert>
-            </VCard>
-          </VCol>
-
-          <VCol cols="12">
-            <VBtn
-              color="primary"
-              variant="outlined"
-              prepend-icon="tabler-plus"
-              @click="addDiscount"
-            >
-              Chegirma qo'shish
-            </VBtn>
-          </VCol>
-        </VRow>
-      </VCardText>
-
-      <VCardActions>
-        <VSpacer />
-        <VBtn
-          color="secondary"
-          variant="outlined"
-          @click="showDiscountsModal = false"
-          :disabled="loading"
-        >
-          Bekor qilish
-        </VBtn>
-        <VBtn
-          color="primary"
-          variant="elevated"
-          @click="saveDiscounts"
-          :loading="loading"
-          :disabled="loading"
-        >
-          Saqlash
-        </VBtn>
-      </VCardActions>
-    </VCard>
-  </VDialog>
+  <DiscountsModal
+    v-model="showDiscountsModal"
+    :discounts="discounts"
+    :monthly-price="form.monthlyPrice"
+    :loading="loading"
+    @save="saveDiscounts"
+  />
 </template>

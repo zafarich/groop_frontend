@@ -366,6 +366,8 @@
     "prettyMoney": true,
     "usePayments": true,
     "useDashboard": true,
-    "useQueryParams": true
+    "useQueryParams": true,
+    "useGroupForm": true,
+    "useStudentPage": true
   }
 }

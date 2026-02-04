@@ -3,7 +3,7 @@ import AppTextField from "@/@core/components/app-form-elements/AppTextField.vue"
 import AppTextarea from "@/@core/components/app-form-elements/AppTextarea.vue";
 import {useToast} from "@/composables/useToast";
 import {$api} from "@/utils/api";
-import {prettyPhoneNumber} from "@/utils/utils";
+import {prettyPhoneNumber, prettyMoney} from "@/utils/utils";
 
 const props = defineProps({
   modelValue: {
@@ -13,6 +13,10 @@ const props = defineProps({
   groupId: {
     type: [String, Number],
     required: true,
+  },
+  group: {
+    type: Object,
+    default: null,
   },
 });
 
@@ -26,6 +30,13 @@ const messageForm = ref({
   isBulk: true,
   status: "all",
 });
+
+// Payment button state
+const includePaymentButton = ref(false);
+const selectedPaymentButtons = ref([]);
+const customPaymentTitle = ref("");
+const customPaymentAmount = ref("");
+const customPaymentAmountDisplay = ref("");
 
 // Student status options
 const statusOptions = [
@@ -81,13 +92,75 @@ const allSelected = computed({
   },
 });
 
+// Available payment buttons based on group configuration
+const availablePaymentButtons = computed(() => {
+  const buttons = [];
+  
+  if (!props.group) return buttons;
+  
+  // Monthly price button (always available if group has monthly price)
+  if (props.group.monthlyPrice && Number(props.group.monthlyPrice) > 0) {
+    buttons.push({
+      type: 'monthly',
+      label: `1 oyga to'lash - ${prettyMoney(props.group.monthlyPrice)} so'm`,
+      amount: Number(props.group.monthlyPrice),
+      value: 'monthly',
+    });
+  }
+  
+  // Trial price button (if trial payment type is PAID and trial price exists)
+  if (props.group.trialPaymentType === 'PAID' && props.group.trialPrice && Number(props.group.trialPrice) > 0) {
+    buttons.push({
+      type: 'trial',
+      label: `Sinov darsi - ${prettyMoney(props.group.trialPrice)} so'm`,
+      amount: Number(props.group.trialPrice),
+      value: 'trial',
+    });
+  }
+  
+  return buttons;
+});
+
+// Check if custom payment option is selected
+const isCustomPaymentSelected = computed(() => {
+  return selectedPaymentButtons.value.includes('custom');
+});
+
+// Check if join group button is available (group must be connected to Telegram)
+const isJoinGroupAvailable = computed(() => {
+  return props.group?.telegramGroupId != null;
+});
+
 const canSend = computed(() => {
   if (!messageForm.value.message.trim()) return false;
   if (!messageForm.value.isBulk && selectedEnrollmentIds.value.length === 0) {
     return false;
   }
+  // Validate custom payment if selected
+  if (includePaymentButton.value && isCustomPaymentSelected.value) {
+    if (!customPaymentTitle.value.trim() || !customPaymentAmount.value || customPaymentAmount.value <= 0) {
+      return false;
+    }
+  }
+  // Validate at least one payment button is selected
+  if (includePaymentButton.value && selectedPaymentButtons.value.length === 0) {
+    return false;
+  }
   return true;
 });
+
+// Format custom amount input
+const formatCustomAmount = (value) => {
+  const numericValue = value.replace(/\s/g, "");
+  const number = parseInt(numericValue, 10);
+  if (isNaN(number)) {
+    customPaymentAmount.value = 0;
+    customPaymentAmountDisplay.value = "";
+  } else {
+    customPaymentAmount.value = number;
+    customPaymentAmountDisplay.value = prettyMoney(number);
+  }
+};
 
 // Methods
 const toggleStudent = (enrollmentId) => {
@@ -206,6 +279,42 @@ const sendMessage = async () => {
       };
     }
 
+    // Add payment buttons if enabled
+    if (includePaymentButton.value && selectedPaymentButtons.value.length > 0) {
+      payload.includePaymentButton = true;
+      payload.paymentButtons = [];
+
+      // Add selected standard buttons
+      for (const buttonValue of selectedPaymentButtons.value) {
+        if (buttonValue === 'custom') {
+          // Add custom payment button
+          if (customPaymentTitle.value.trim() && customPaymentAmount.value > 0) {
+            payload.paymentButtons.push({
+              label: `${customPaymentTitle.value.trim()} - ${prettyMoney(customPaymentAmount.value)} so'm`,
+              amount: customPaymentAmount.value,
+              type: 'custom',
+            });
+          }
+        } else if (buttonValue === 'join_group') {
+          // Add join group button
+          payload.paymentButtons.push({
+            label: "📲 Guruhga qo'shilish",
+            type: 'join_group',
+          });
+        } else {
+          // Find the button config
+          const buttonConfig = availablePaymentButtons.value.find(b => b.value === buttonValue);
+          if (buttonConfig) {
+            payload.paymentButtons.push({
+              label: buttonConfig.label,
+              amount: buttonConfig.amount,
+              type: buttonConfig.type,
+            });
+          }
+        }
+      }
+    }
+
     const response = await $api(`/v1/groups/${props.groupId}/send-message`, {
       method: "POST",
       body: payload,
@@ -239,6 +348,12 @@ const closeModal = () => {
     total: 0,
     totalPages: 0,
   };
+  // Reset payment state
+  includePaymentButton.value = false;
+  selectedPaymentButtons.value = [];
+  customPaymentTitle.value = "";
+  customPaymentAmount.value = "";
+  customPaymentAmountDisplay.value = "";
   emit("update:modelValue", false);
 };
 
@@ -280,6 +395,12 @@ watch(
       selectedEnrollmentIds.value = [];
       students.value = [];
       studentsSearch.value = "";
+      // Reset payment state
+      includePaymentButton.value = false;
+      selectedPaymentButtons.value = [];
+      customPaymentTitle.value = "";
+      customPaymentAmount.value = "";
+      customPaymentAmountDisplay.value = "";
     }
   },
 );
@@ -358,6 +479,125 @@ watch(
             </VTooltip>
           </VCol>
         </VRow>
+
+        <!-- Payment Button Section -->
+        <VCard variant="outlined" class="mb-4">
+          <VCardText>
+            <VRow>
+              <VCol cols="12">
+                <VSwitch
+                  v-model="includePaymentButton"
+                  label="To'lov tugmasi bilan yuborish"
+                  color="success"
+                  hide-details
+                />
+                <div class="text-caption text-medium-emphasis mt-1">
+                  Xabar bilan birga to'lov tugmasi ham yuboriladi
+                </div>
+              </VCol>
+            </VRow>
+
+            <!-- Payment Button Options -->
+            <VExpandTransition>
+              <VRow v-if="includePaymentButton" class="mt-2">
+                <VCol cols="12">
+                  <div class="text-subtitle-2 mb-2">To'lov tugmalari:</div>
+                  
+                  <!-- Standard Payment Buttons -->
+                  <VCheckbox
+                    v-for="button in availablePaymentButtons"
+                    :key="button.value"
+                    v-model="selectedPaymentButtons"
+                    :label="button.label"
+                    :value="button.value"
+                    hide-details
+                    density="compact"
+                    class="mb-1"
+                  />
+                  
+                  <!-- Join Group Button Option -->
+                  <VCheckbox
+                    v-if="isJoinGroupAvailable"
+                    v-model="selectedPaymentButtons"
+                    label="📲 Guruhga qo'shilish (bir martalik havola)"
+                    value="join_group"
+                    hide-details
+                    density="compact"
+                    class="mb-1"
+                  />
+                  
+                  <!-- Custom Payment Button Option -->
+                  <VCheckbox
+                    v-model="selectedPaymentButtons"
+                    label="Boshqa summa (qo'lda kiritish)"
+                    value="custom"
+                    hide-details
+                    density="compact"
+                    class="mb-2"
+                  />
+
+                  <!-- Custom Payment Form -->
+                  <VExpandTransition>
+                    <VRow v-if="isCustomPaymentSelected" class="mt-2">
+                      <VCol cols="12" md="6">
+                        <AppTextField
+                          v-model="customPaymentTitle"
+                          label="Tugma nomi"
+                          placeholder="Masalan: Qisman to'lash"
+                        />
+                      </VCol>
+                      <VCol cols="12" md="6">
+                        <AppTextField
+                          v-model="customPaymentAmountDisplay"
+                          label="Summa"
+                          placeholder="50 000"
+                          @input="formatCustomAmount($event.target.value)"
+                        >
+                          <template #append-inner>
+                            <span class="text-body-2 text-medium-emphasis">so'm</span>
+                          </template>
+                        </AppTextField>
+                      </VCol>
+                    </VRow>
+                  </VExpandTransition>
+
+                  <!-- Preview of how button will look -->
+                  <VAlert
+                    v-if="selectedPaymentButtons.length > 0"
+                    type="info"
+                    variant="tonal"
+                    density="compact"
+                    class="mt-3"
+                  >
+                    <div class="text-caption">Tugma ko'rinishi:</div>
+                    <div class="d-flex flex-wrap gap-2 mt-1">
+                      <VChip
+                        v-for="buttonValue in selectedPaymentButtons"
+                        :key="buttonValue"
+                        size="small"
+                        color="primary"
+                        variant="tonal"
+                      >
+                        <template v-if="buttonValue === 'custom' && customPaymentTitle">
+                          {{ customPaymentTitle }} - {{ prettyMoney(customPaymentAmount || 0) }} so'm
+                        </template>
+                        <template v-else-if="buttonValue === 'custom'">
+                          Boshqa summa
+                        </template>
+                        <template v-else-if="buttonValue === 'join_group'">
+                          📲 Guruhga qo'shilish
+                        </template>
+                        <template v-else>
+                          {{ availablePaymentButtons.find(b => b.value === buttonValue)?.label }}
+                        </template>
+                      </VChip>
+                    </div>
+                  </VAlert>
+                </VCol>
+              </VRow>
+            </VExpandTransition>
+          </VCardText>
+        </VCard>
 
         <!-- Info Alert for Bulk Mode -->
         <VAlert
