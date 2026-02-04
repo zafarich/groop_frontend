@@ -68,6 +68,21 @@ const debtorsSummary = ref({
 const discountedStudents = ref([]);
 const discountedStudentsLoading = ref(false);
 
+// Telegram students state
+const telegramStudents = ref([]);
+const telegramStudentsLoading = ref(false);
+const telegramStudentsSummary = ref({
+  total: 0,
+  trialCount: 0,
+  activeCount: 0,
+});
+const telegramStudentsPagination = ref({
+  page: 1,
+  limit: 10,
+  total: 0,
+  totalPages: 0,
+});
+
 // Discount modal state
 const showDiscountModal = ref(false);
 const selectedEnrollment = ref(null);
@@ -138,7 +153,7 @@ const showStudentMessageModal = ref(false);
 const selectedMessageEnrollment = ref(null);
 
 const viewStudentProfile = (student) => {
-  const id = student.studentId || student?.student?.id;
+  const id = student.studentId || student?.student?.id || student?.id;
   if (id) {
     router.push(`/students/${id}`);
   } else {
@@ -365,6 +380,43 @@ const fetchDiscountedStudents = async () => {
   }
 };
 
+// Fetch Telegram students (TRIAL and ACTIVE from Telegram)
+const fetchTelegramStudents = async () => {
+  telegramStudentsLoading.value = true;
+  try {
+    const params = new URLSearchParams({
+      page: telegramStudentsPagination.value.page.toString(),
+      limit: telegramStudentsPagination.value.limit.toString(),
+    });
+
+    const response = await $api(
+      `/v1/groups/${groupId.value}/telegram-students?${params.toString()}`,
+      {
+        method: "GET",
+      },
+    );
+
+    if (response.success && response.data) {
+      telegramStudents.value = response.data.students || [];
+      telegramStudentsSummary.value = response.data.summary || {
+        total: 0,
+        trialCount: 0,
+        activeCount: 0,
+      };
+      // Update pagination from server meta
+      if (response.meta) {
+        telegramStudentsPagination.value.total = response.meta.total;
+        telegramStudentsPagination.value.totalPages = response.meta.totalPages;
+      }
+    }
+  } catch (error) {
+    console.error("Error fetching Telegram students:", error);
+    showError("Telegram o'quvchilar ro'yxatini yuklashda xatolik");
+  } finally {
+    telegramStudentsLoading.value = false;
+  }
+};
+
 // Search handler with debounce
 const searchTimeout = ref(null);
 const onStudentsSearch = () => {
@@ -383,6 +435,8 @@ const onTabChange = () => {
     fetchDebtors();
   } else if (activeTab.value === "students-with-discount") {
     fetchDiscountedStudents();
+  } else if (activeTab.value === "telegram-students") {
+    fetchTelegramStudents();
   } else {
     studentsPagination.value.page = 1;
     fetchStudents();
@@ -678,6 +732,18 @@ const debtorsToExpel = computed(() => {
     return isAboveMin && isNotExcluded;
   });
 });
+
+// Telegram students pagination handlers (server-side pagination)
+const onTelegramStudentsPageChange = (page) => {
+  telegramStudentsPagination.value.page = page;
+  fetchTelegramStudents();
+};
+
+const onTelegramStudentsLimitChange = (limit) => {
+  telegramStudentsPagination.value.limit = limit;
+  telegramStudentsPagination.value.page = 1;
+  fetchTelegramStudents();
+};
 
 const performBulkExpel = async () => {
   if (debtorsToExpel.value.length === 0) {
@@ -1139,6 +1205,18 @@ watch(studentStatusFilter, () => {
             <VIcon icon="tabler-discount-2" class="me-1" size="18" />
             Chegirmalilar
           </VTab>
+          <VTab value="telegram-students">
+            <VIcon icon="tabler-brand-telegram" class="me-1" size="18" />
+            Telegram guruhdagilar
+            <VChip
+              v-if="telegramStudentsSummary.total > 0"
+              size="x-small"
+              color="info"
+              class="ms-2"
+            >
+              {{ telegramStudentsSummary.total }}
+            </VChip>
+          </VTab>
         </VTabs>
         <VDivider />
 
@@ -1383,6 +1461,174 @@ watch(studentStatusFilter, () => {
               </tr>
             </tbody>
           </VTable>
+        </template>
+
+        <!-- Telegram Students Content (ActiveTab = telegram-students) -->
+        <template v-else-if="activeTab === 'telegram-students'">
+          <VCardText>
+            <VAlert type="info" variant="tonal" class="mb-4">
+              <div class="d-flex align-center justify-space-between flex-wrap gap-4">
+                <div>
+                  <div class="text-body-1 font-weight-medium mb-1">
+                    Jami: {{ telegramStudentsSummary.total }} ta
+                  </div>
+                  <div class="text-body-2">
+                    Sinov darsidagi: {{ telegramStudentsSummary.trialCount }} ta | 
+                    Faol: {{ telegramStudentsSummary.activeCount }} ta
+                  </div>
+                </div>
+              </div>
+            </VAlert>
+          </VCardText>
+          <VTable>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>O'quvchi</th>
+                <th>Status</th>
+                <th>Balans</th>
+                <th>Amallar</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="telegramStudentsLoading">
+                <td colspan="5" class="text-center py-8">
+                  <VProgressCircular indeterminate color="primary" />
+                </td>
+              </tr>
+              <tr v-else-if="telegramStudents.length === 0">
+                <td colspan="5" class="text-center py-8">
+                  <div class="text-body-1 text-medium-emphasis">
+                    Telegram orqali qo'shilgan o'quvchilar topilmadi
+                  </div>
+                </td>
+              </tr>
+              <tr v-else v-for="student in telegramStudents" :key="student.enrollmentId">
+                <td>
+                  <span class="text-caption text-medium-emphasis">#{{ student.student.id }}</span>
+                </td>
+                <td>
+                  <div class="d-flex flex-column">
+                    <a
+                      class="font-weight-medium text-primary cursor-pointer"
+                      @click="viewStudentProfile(student.student)"
+                    >
+                      {{ student.student.firstName }} {{ student.student.lastName }}
+                    </a>
+                    <span class="text-caption text-medium-emphasis">
+                      {{ prettyPhoneNumber(student.student.phoneNumber) }}
+                    </span>
+                  </div>
+                </td>
+                <td>
+                  <VChip
+                    size="small"
+                    :color="getStudentStatusConfig(student.status).color"
+                    class="text-capitalize"
+                  >
+                    {{ getStudentStatusConfig(student.status).text }}
+                  </VChip>
+                </td>
+                <td>
+                  <span
+                    :class="student.balance < 0 ? 'text-error' : 'text-success'"
+                    class="font-weight-medium"
+                  >
+                    {{ prettyMoney(student.balance) }} so'm
+                  </span>
+                </td>
+                <td>
+                  <div class="d-flex align-center gap-2">
+                    <VBtn
+                      icon
+                      size="small"
+                      color="default"
+                      variant="text"
+                      @click="viewStudentProfile(student.student)"
+                    >
+                      <VIcon icon="tabler-eye" />
+                      <VTooltip activator="parent" location="top">Profilni ko'rish</VTooltip>
+                    </VBtn>
+
+                    <VMenu>
+                      <template #activator="{props}">
+                        <VBtn
+                          size="small"
+                          color="primary"
+                          variant="tonal"
+                          v-bind="props"
+                        >
+                          Amallar
+                          <VIcon icon="tabler-chevron-down" size="16" class="ms-1" />
+                        </VBtn>
+                      </template>
+                      <VList>
+                        <VListItem
+                          v-if="student.status === 'TRIAL'"
+                          @click="openActivationModal(student)"
+                        >
+                          <template #prepend><VIcon icon="tabler-check" color="success" /></template>
+                          <VListItemTitle>Faollashtirish</VListItemTitle>
+                        </VListItem>
+                        <VListItem @click="openDiscountModal(student)">
+                          <template #prepend><VIcon icon="tabler-discount" color="primary" /></template>
+                          <VListItemTitle>Chegirma belgilash</VListItemTitle>
+                        </VListItem>
+                        <VListItem @click="openAddBalanceModal(student)">
+                          <template #prepend><VIcon icon="tabler-cash" color="success" /></template>
+                          <VListItemTitle>To'lov qo'shish</VListItemTitle>
+                        </VListItem>
+                        <VListItem @click="openStudentMessageModal(student)">
+                          <template #prepend><VIcon icon="tabler-send" color="info" /></template>
+                          <VListItemTitle>Xabar yuborish</VListItemTitle>
+                        </VListItem>
+                        <VListItem
+                          v-if="student.telegramInfo?.username"
+                          @click="openTelegram(student.telegramInfo.username)"
+                        >
+                          <template #prepend><VIcon icon="tabler-brand-telegram" color="primary" /></template>
+                          <VListItemTitle>Telegramdan yozish</VListItemTitle>
+                        </VListItem>
+                        <VListItem @click="openExpelModal(student)">
+                          <template #prepend><VIcon icon="tabler-user-x" color="error" /></template>
+                          <VListItemTitle>Guruhdan chetlatish</VListItemTitle>
+                        </VListItem>
+                      </VList>
+                    </VMenu>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </VTable>
+          <!-- Pagination -->
+          <VCardText v-if="telegramStudentsPagination.totalPages > 1">
+            <VRow class="align-center">
+              <VCol cols="12" md="6">
+                <div class="d-flex align-center gap-2">
+                  <span class="text-body-2">Sahifada:</span>
+                  <VSelect
+                    :model-value="telegramStudentsPagination.limit"
+                    :items="[10, 20, 50, 100]"
+                    density="compact"
+                    variant="outlined"
+                    style="max-width: 100px"
+                    @update:model-value="onTelegramStudentsLimitChange"
+                  />
+                </div>
+              </VCol>
+              <VCol cols="12" md="6" class="d-flex justify-end">
+                <VPagination
+                  :model-value="telegramStudentsPagination.page"
+                  :length="telegramStudentsPagination.totalPages"
+                  :total-visible="5"
+                  @update:model-value="onTelegramStudentsPageChange"
+                />
+              </VCol>
+            </VRow>
+            <div class="text-body-2 text-center mt-2">
+              Jami: {{ telegramStudentsPagination.total }} ta o'quvchi
+            </div>
+          </VCardText>
         </template>
 
         <!-- Students Content (ActiveTab = students) -->

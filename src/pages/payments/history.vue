@@ -12,7 +12,6 @@ definePage({
 });
 
 const router = useRouter();
-
 const {payments, meta, loading, fetchPayments} = usePayments();
 
 // State
@@ -30,6 +29,22 @@ const pagination = ref({
 // Receipt modal state
 const showReceiptModal = ref(false);
 const selectedReceipt = ref(null);
+
+// Edit modal state
+const showEditModal = ref(false);
+const editingPayment = ref(null);
+const editLoading = ref(false);
+const editForm = ref({
+  amount: 0,
+  amountDisplay: "",
+});
+
+// Delete modal state
+const showDeleteModal = ref(false);
+const deletingPayment = ref(null);
+const deleteLoading = ref(false);
+
+
 
 // Status options
 const statusOptions = [
@@ -143,6 +158,86 @@ const openReceiptModal = (payment) => {
   showReceiptModal.value = true;
 };
 
+// Edit handlers
+const openEditModal = (payment) => {
+  editingPayment.value = payment;
+  editForm.value = {
+    amount: payment.amount,
+    amountDisplay: prettyMoney(payment.amount),
+  };
+  showEditModal.value = true;
+};
+
+// Handle formatted money input
+const onMoneyInput = (val) => {
+  if (!val) {
+    editForm.value.amount = 0;
+    editForm.value.amountDisplay = "";
+    return;
+  }
+  // Allow digits and dots, remove spaces
+  const cleanVal = val.toString().replace(/[^\d.]/g, "");
+  const num = parseFloat(cleanVal || "0");
+  
+  editForm.value.amount = num;
+  editForm.value.amountDisplay = prettyMoney(num);
+};
+
+const onEditConfirm = async () => {
+  if (!editingPayment.value) return;
+
+  editLoading.value = true;
+  try {
+    const body = {
+      amount: Number(editForm.value.amount),
+    };
+
+    const response = await $api(`/v1/payments/${editingPayment.value.id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+
+    if (response.success) {
+      showEditModal.value = false;
+      editingPayment.value = null;
+      // Refresh list
+      loadPayments();
+    }
+  } catch (error) {
+    console.error("Error updating payment:", error);
+  } finally {
+    editLoading.value = false;
+  }
+};
+
+// Delete handlers
+const openDeleteModal = (payment) => {
+  deletingPayment.value = payment;
+  showDeleteModal.value = true;
+};
+
+const onDeleteConfirm = async () => {
+  if (!deletingPayment.value) return;
+
+  deleteLoading.value = true;
+  try {
+    const response = await $api(`/v1/payments/${deletingPayment.value.id}`, {
+      method: "DELETE",
+    });
+
+    if (response.success) {
+      showDeleteModal.value = false;
+      deletingPayment.value = null;
+      // Refresh list
+      loadPayments();
+    }
+  } catch (error) {
+    console.error("Error deleting payment:", error);
+  } finally {
+    deleteLoading.value = false;
+  }
+};
+
 // Helpers
 const getStudentName = (payment) => {
   if (!payment.student) return "-";
@@ -174,6 +269,8 @@ const getStatusConfig = (status) => {
       return {color: "default", text: status};
   }
 };
+
+
 
 const formatDateTime = (dateString) => {
   if (!dateString) return "-";
@@ -298,7 +395,7 @@ onMounted(async () => {
               <th>Summa</th>
               <th>Sana</th>
               <th>Status</th>
-              <th>Chek</th>
+              <th>Amallar</th>
             </tr>
           </thead>
           <tbody>
@@ -345,14 +442,39 @@ onMounted(async () => {
                 </VChip>
               </td>
               <td>
-                <VBtn
-                  v-if="payment.receiptUrl"
-                  icon="tabler-eye"
-                  variant="text"
-                  size="small"
-                  color="primary"
-                  @click="openReceiptModal(payment)"
-                />
+                <div class="d-flex align-center gap-1">
+                  <VBtn
+                    v-if="payment.receiptUrl"
+                    icon="tabler-eye"
+                    variant="text"
+                    size="small"
+                    color="primary"
+                    @click="openReceiptModal(payment)"
+                  >
+                    <VIcon icon="tabler-eye" size="20" />
+                    <VTooltip activator="parent" location="top">Chekni ko'rish</VTooltip>
+                  </VBtn>
+                  <VBtn
+                    icon="tabler-edit"
+                    variant="text"
+                    size="small"
+                    color="warning"
+                    @click="openEditModal(payment)"
+                  >
+                    <VIcon icon="tabler-edit" size="20" />
+                    <VTooltip activator="parent" location="top">Tahrirlash</VTooltip>
+                  </VBtn>
+                  <VBtn
+                    icon="tabler-trash"
+                    variant="text"
+                    size="small"
+                    color="error"
+                    @click="openDeleteModal(payment)"
+                  >
+                    <VIcon icon="tabler-trash" size="20" />
+                    <VTooltip activator="parent" location="top">O'chirish</VTooltip>
+                  </VBtn>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -400,6 +522,91 @@ onMounted(async () => {
           color="primary"
         >
           <VIcon icon="tabler-download" class="me-2" /> Yuklab olish
+        </VBtn>
+      </VCardActions>
+    </VCard>
+  </VDialog>
+
+  <!-- Edit Payment Modal -->
+  <VDialog v-model="showEditModal" max-width="500">
+    <VCard v-if="editingPayment">
+      <VCardTitle class="d-flex justify-space-between align-center">
+        <span>To'lovni tahrirlash</span>
+        <VBtn
+          icon="tabler-x"
+          variant="text"
+          size="small"
+          @click="showEditModal = false"
+        />
+      </VCardTitle>
+      <VCardText>
+        <div class="text-body-2 text-medium-emphasis mb-4">
+          <div><strong>O'quvchi:</strong> {{ getStudentName(editingPayment) }}</div>
+          <div><strong>Guruh:</strong> {{ getGroupName(editingPayment) }}</div>
+          <div><strong>Status:</strong> {{ getStatusConfig(editingPayment.status).text }}</div>
+        </div>
+        <VTextField
+          v-model="editForm.amountDisplay"
+          label="Summa (so'm) *"
+          density="compact"
+          hide-details
+          @update:model-value="onMoneyInput"
+        />
+      </VCardText>
+      <VCardActions>
+        <VSpacer />
+        <VBtn
+          color="secondary"
+          variant="outlined"
+          @click="showEditModal = false"
+          :disabled="editLoading"
+        >
+          Bekor qilish
+        </VBtn>
+        <VBtn
+          color="primary"
+          variant="elevated"
+          @click="onEditConfirm"
+          :loading="editLoading"
+          :disabled="editLoading"
+        >
+          Saqlash
+        </VBtn>
+      </VCardActions>
+    </VCard>
+  </VDialog>
+
+  <!-- Delete Confirmation Modal -->
+  <VDialog v-model="showDeleteModal" max-width="500">
+    <VCard v-if="deletingPayment">
+      <VCardTitle class="text-h5 pt-4 px-6">To'lovni o'chirish</VCardTitle>
+      <VCardText>
+        <p>Siz haqiqatan ham ushbu to'lovni o'chirmoqchimisiz?</p>
+        <div class="text-body-2 text-medium-emphasis mt-2">
+          <div><strong>ID:</strong> {{ deletingPayment.id }}</div>
+          <div><strong>O'quvchi:</strong> {{ getStudentName(deletingPayment) }}</div>
+          <div><strong>Summa:</strong> {{ prettyMoney(deletingPayment.amount) }} so'm</div>
+        </div>
+        <p class="text-caption text-error mt-4">Bu amalni ortga qaytarib bo'lmaydi.</p>
+      </VCardText>
+      <VCardActions>
+        <VSpacer />
+        <VBtn
+          color="secondary"
+          variant="outlined"
+          @click="showDeleteModal = false"
+          :disabled="deleteLoading"
+        >
+          Bekor qilish
+        </VBtn>
+        <VBtn
+          color="error"
+          variant="elevated"
+          @click="onDeleteConfirm"
+          :loading="deleteLoading"
+          :disabled="deleteLoading"
+        >
+          O'chirish
         </VBtn>
       </VCardActions>
     </VCard>
