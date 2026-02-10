@@ -11,3 +11,5 @@ export {default as StudentExpelModal} from "./modals/StudentExpelModal.vue";
 export {default as StudentPaymentEditModal} from "./modals/StudentPaymentEditModal.vue";
 export {default as StudentPaymentDeleteModal} from "./modals/StudentPaymentDeleteModal.vue";
 export {default as StudentReceiptModal} from "./modals/StudentReceiptModal.vue";
+export {default as GenerateInviteLinkModal} from "./modals/GenerateInviteLinkModal.vue";
+export {default as AddToGroupModal} from "./modals/AddToGroupModal.vue";

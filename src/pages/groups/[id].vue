@@ -15,6 +15,9 @@ import {
   ExpelModal,
   BulkExpelModal,
   StatusConfirmModal,
+  PromiseToPayModal,
+  BulkRemoveTrialModal,
+  BanStudentModal,
 } from "@/components/groups";
 import {useToast} from "@/composables/useToast";
 import {$api} from "@/utils/api";
@@ -100,8 +103,11 @@ const showAddBalanceModal = ref(false);
 const showExpelModal = ref(false);
 const showBulkExpelModal = ref(false);
 const showBulkActivationModal = ref(false);
+const showBulkRemoveTrialModal = ref(false);
 const showSendMessageModal = ref(false);
 const showStudentMessageModal = ref(false);
+const showPromiseToPayModal = ref(false);
+const showBanStudentModal = ref(false);
 
 // Selected items for modals
 const selectedEnrollment = ref(null);
@@ -147,6 +153,8 @@ const fetchStudents = async () => {
         params.append("status", "ACTIVE");
       } else if (studentStatusFilter.value === "left_group") {
         params.append("status", "LEFT_GROUP");
+      } else if (studentStatusFilter.value === "dropped") {
+        params.append("status", "DROPPED");
       } else if (studentStatusFilter.value === "expelled") {
         params.append("status", "EXPELLED");
       }
@@ -292,6 +300,23 @@ const onTabChange = () => {
 const onFilterChange = () => {
   studentsPagination.value.page = 1;
   fetchStudents();
+};
+
+// Promise to Pay
+const openPromiseToPayModal = (student) => {
+  selectedEnrollment.value = student;
+  showPromiseToPayModal.value = true;
+};
+
+// Ban Student
+const openBanStudentModal = (student) => {
+  selectedEnrollment.value = student;
+  showBanStudentModal.value = true;
+};
+
+// Bulk Remove Trial
+const openBulkRemoveTrialModal = () => {
+  showBulkRemoveTrialModal.value = true;
 };
 
 // Pagination handlers
@@ -812,6 +837,7 @@ watch(studentStatusFilter, () => {
           :is-channel="isChannel"
           @search="onStudentsSearch"
           @open-bulk-activation="openBulkActivationModal"
+          @open-bulk-remove-trial="openBulkRemoveTrialModal"
           @view-student="viewStudentProfile"
           @open-activation="openActivationModal"
           @open-discount="openDiscountModal"
@@ -819,6 +845,8 @@ watch(studentStatusFilter, () => {
           @open-message="openStudentMessageModal"
           @open-telegram="openTelegram"
           @open-expel="openExpelModal"
+          @open-promise-to-pay="openPromiseToPayModal"
+          @open-ban-student="openBanStudentModal"
           @update:pagination="onStudentsPaginationUpdate"
           @update:sort-order="sortOrder = $event"
         />
@@ -909,5 +937,30 @@ watch(studentStatusFilter, () => {
     v-model="showStudentMessageModal"
     :enrollment="selectedMessageEnrollment"
     @message-sent="showStudentMessageModal = false"
+  />
+
+  <!-- Promise to Pay Modal -->
+  <PromiseToPayModal
+    v-if="group"
+    v-model="showPromiseToPayModal"
+    :enrollment="selectedEnrollment"
+    :group-id="groupId"
+    @success="fetchStudents"
+  />
+
+  <!-- Ban Student Modal -->
+  <BanStudentModal
+    v-model="showBanStudentModal"
+    :student="selectedEnrollment?.student"
+    :enrollment="selectedEnrollment"
+    @success="fetchStudents"
+  />
+
+  <!-- Bulk Remove Trial Modal -->
+  <BulkRemoveTrialModal
+    v-if="group"
+    v-model="showBulkRemoveTrialModal"
+    :group-id="groupId"
+    @success="fetchStudents"
   />
 </template>

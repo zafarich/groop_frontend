@@ -28,3 +28,6 @@ export {default as StatusConfirmModal} from "./modals/StatusConfirmModal.vue";
 export {default as TeachersModal} from "./modals/TeachersModal.vue";
 export {default as SchedulesModal} from "./modals/SchedulesModal.vue";
 export {default as DiscountsModal} from "./modals/DiscountsModal.vue";
+export {default as PromiseToPayModal} from "./modals/PromiseToPayModal.vue";
+export {default as BulkRemoveTrialModal} from "./modals/BulkRemoveTrialModal.vue";
+export {default as BanStudentModal} from "./modals/BanStudentModal.vue";

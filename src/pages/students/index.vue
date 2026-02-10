@@ -1,6 +1,8 @@
 <script setup>
 import AppTextField from "@/@core/components/app-form-elements/AppTextField.vue";
 import AppTextarea from "@/@core/components/app-form-elements/AppTextarea.vue";
+import AddStudentModal from "@/components/students/modals/AddStudentModal.vue";
+import AddToGroupModal from "@/components/students/modals/AddToGroupModal.vue";
 import {useToast} from "@/composables/useToast";
 import {useQueryParams} from "@/composables/useQueryParams";
 import {$api} from "@/utils/api";
@@ -35,6 +37,9 @@ const studentEnrollments = ref([]);
 const enrollmentsLoading = ref(false);
 const selectedEnrollmentId = ref(null);
 
+// Add student modal state
+const showAddStudentModal = ref(false);
+
 // Add balance modal state
 const showAddBalanceModal = ref(false);
 const selectedBalanceEnrollment = ref(null);
@@ -44,6 +49,10 @@ const balanceForm = ref({
   notes: "",
 });
 const balanceLoading = ref(false);
+
+// Add to group modal state
+const showAddToGroupModal = ref(false);
+const selectedAddToGroupStudent = ref(null);
 
 // Fetch groups for filter dropdown
 const fetchGroups = async () => {
@@ -226,6 +235,17 @@ const addBalance = async () => {
   }
 };
 
+// Handle student created
+const onStudentCreated = () => {
+  fetchStudents();
+};
+
+// Open add to group modal
+const openAddToGroupModal = (student) => {
+  selectedAddToGroupStudent.value = student;
+  showAddToGroupModal.value = true;
+};
+
 // Initialize query params sync
 useQueryParams({
   filters: {
@@ -259,6 +279,14 @@ onMounted(() => {
             <VIcon icon="tabler-school" class="me-2" />
             <span>O'quvchilar ro'yxati</span>
           </div>
+          <VBtn
+            color="primary"
+            variant="elevated"
+            prepend-icon="tabler-user-plus"
+            @click="showAddStudentModal = true"
+          >
+            O'quvchi qo'shish
+          </VBtn>
         </VCardTitle>
 
         <VDivider />
@@ -408,6 +436,12 @@ onMounted(() => {
                         /></template>
                         <VListItemTitle>Telegramdan yozish</VListItemTitle>
                       </VListItem>
+                      <VListItem @click="openAddToGroupModal(student)">
+                        <template #prepend
+                          ><VIcon icon="tabler-users-plus" color="info"
+                        /></template>
+                        <VListItemTitle>Guruhga qo'shish</VListItemTitle>
+                      </VListItem>
                     </VList>
                   </VMenu>
                 </div>
@@ -446,6 +480,12 @@ onMounted(() => {
       </VCard>
     </VCol>
   </VRow>
+
+  <!-- Add Student Modal -->
+  <AddStudentModal
+    v-model="showAddStudentModal"
+    @student-created="onStudentCreated"
+  />
 
   <!-- Group Selection Modal -->
   <VDialog v-model="showGroupSelectionModal" max-width="600">
@@ -643,4 +683,11 @@ onMounted(() => {
       </VCardActions>
     </VCard>
   </VDialog>
+
+  <!-- Add to Group Modal -->
+  <AddToGroupModal
+    v-model="showAddToGroupModal"
+    :student="selectedAddToGroupStudent"
+    @enrollment-created="onStudentCreated"
+  />
 </template>

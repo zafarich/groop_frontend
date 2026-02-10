@@ -53,6 +53,7 @@ const emit = defineEmits([
   "update:pagination",
   "search",
   "open-bulk-activation",
+  "open-bulk-remove-trial",
   "view-student",
   "open-activation",
   "open-discount",
@@ -60,6 +61,8 @@ const emit = defineEmits([
   "open-message",
   "open-telegram",
   "open-expel",
+  "open-promise-to-pay",
+  "open-ban-student",
 ]);
 
 const router = useRouter();
@@ -163,6 +166,7 @@ const openTelegram = (username) => {
               {title: 'Sinov', value: 'trial'},
               {title: 'Lead', value: 'leads'},
               {title: 'Guruhdan chiqqan', value: 'left_group'},
+              {title: 'Tashlab ketgan', value: 'dropped'},
               {title: 'Chetlatilgan', value: 'expelled'},
             ]"
             label="Status"
@@ -195,8 +199,8 @@ const openTelegram = (username) => {
           />
         </VCol>
 
-        <!-- Bulk Action -->
-        <VCol cols="12" md="4">
+        <!-- Bulk Actions -->
+        <VCol cols="12" md="8" class="d-flex gap-2">
           <VBtn
             color="primary"
             variant="elevated"
@@ -215,6 +219,15 @@ const openTelegram = (username) => {
             >
               {{ activatableStudentsCount }}
             </VChip>
+          </VBtn>
+
+          <VBtn
+            color="error"
+            variant="outlined"
+            @click="$emit('open-bulk-remove-trial')"
+          >
+            <VIcon icon="tabler-user-minus" class="me-1" />
+            Sinov o'quvchilarini chiqarish
           </VBtn>
         </VCol>
       </VRow>
@@ -336,6 +349,15 @@ const openTelegram = (username) => {
                     /></template>
                     <VListItemTitle>Chegirma belgilash</VListItemTitle>
                   </VListItem>
+                  <VListItem
+                    v-if="student.status === 'TRIAL'"
+                    @click="$emit('open-promise-to-pay', student)"
+                  >
+                    <template #prepend
+                      ><VIcon icon="tabler-calendar-check" color="info"
+                    /></template>
+                    <VListItemTitle>To'lov va'dasi berish</VListItemTitle>
+                  </VListItem>
                   <VListItem @click="$emit('open-add-balance', student)">
                     <template #prepend
                       ><VIcon icon="tabler-cash" color="success"
@@ -358,6 +380,15 @@ const openTelegram = (username) => {
                         color="primary"
                     /></template>
                     <VListItemTitle>Telegramdan yozish</VListItemTitle>
+                  </VListItem>
+                  <VListItem
+                    v-if="student.status === 'TRIAL'"
+                    @click="$emit('open-ban-student', student)"
+                  >
+                    <template #prepend
+                      ><VIcon icon="tabler-ban" color="error"
+                    /></template>
+                    <VListItemTitle>Sinovdan taqiqlash</VListItemTitle>
                   </VListItem>
                   <VListItem @click="$emit('open-expel', student)">
                     <template #prepend
